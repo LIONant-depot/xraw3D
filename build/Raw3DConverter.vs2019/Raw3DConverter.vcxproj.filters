@@ -1,0 +1,450 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="Raw3DConverter.cpp" />
+    <ClCompile Include="..\..\dependencies\xcore\src\xcore.cpp">
+      <Filter>Dependencies\xcore</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dependencies\xcore\src\xcore_profiler_1.cpp">
+      <Filter>Dependencies\xcore</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\dependencies\xcore\src\xcore_profiler_2.cpp">
+      <Filter>Dependencies\xcore</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\src\xraw3d.cpp">
+      <Filter>Raw3D</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Dependencies">
+      <UniqueIdentifier>{2f59bfe9-e5f5-49d5-aa5c-51080d20a9e6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Dependencies\xcore">
+      <UniqueIdentifier>{89cca9e9-deca-442b-a130-67a418642028}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Dependencies\assimp">
+      <UniqueIdentifier>{149b2498-c507-4a2f-8255-90a1cd0d034d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Raw3D">
+      <UniqueIdentifier>{d80d9ab2-6601-4970-8499-95bc4a7d8c97}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\aabb.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\ai_assert.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\anim.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\BaseImporter.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\Bitmap.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\BlobIOSystem.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\ByteSwapper.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\camera.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\cexport.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\cfileio.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\cimport.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\ColladaMetaData.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\color4.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\commonMetaData.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\CreateAnimMesh.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\DefaultIOStream.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\DefaultIOSystem.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\DefaultLogger.hpp">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\defs.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\Exceptional.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\Exporter.hpp">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\fast_atof.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\GenericProperty.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\Hash.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\Importer.hpp">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\importerdesc.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\IOStream.hpp">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\IOStreamBuffer.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\IOSystem.hpp">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\light.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\LineSplitter.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\LogAux.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\Logger.hpp">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\LogStream.hpp">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\material.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\MathFunctions.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\matrix3x3.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\matrix4x4.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\MemoryIOWrapper.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\mesh.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\metadata.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\NullLogger.hpp">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\ParsingUtils.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\pbrmaterial.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\postprocess.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\Profiler.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\ProgressHandler.hpp">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\qnan.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\quaternion.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\RemoveComments.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\scene.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\SceneCombiner.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\SGSpatialSort.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\SkeletonMeshBuilder.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\SmallVector.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\SmoothingGroups.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\SpatialSort.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\StandardShapes.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\StreamReader.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\StreamWriter.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\StringComparison.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\StringUtils.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\Subdivision.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\texture.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\TinyFormatter.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\types.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\vector2.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\vector3.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\version.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\Vertex.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\XmlParser.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\XMLTools.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\assimp\include\assimp\ZipArchiveIOSystem.h">
+      <Filter>Dependencies\assimp</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_arglist.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_array.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_assert.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_bitmap.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_bits.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_cmdline.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_color.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_compression.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_context.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_crc.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_endian.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_error.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_event.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_file.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_function.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_global.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_guid.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_lock.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_lockless_pool.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_lockless_queues.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_log.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_math.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_math_matrix4.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_math_quaternion.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_math_radian3.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_math_shapes.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_math_transform.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_math_vector2.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_math_vector3.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_math_vector4.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_memory.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_profiler.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_ptr.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_random.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_rtti.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_scheduler_channel.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_scheduler_job.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_scheduler_system.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_scheduler_trigger.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_serialicer.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_serializer.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_span.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_string.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_system_reg.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_target.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_textfile.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_textfile2.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_types.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_unique_span.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_units.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\dependencies\xcore\src\xcore_vector.h">
+      <Filter>Dependencies\xcore</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\xraw3d.h">
+      <Filter>Raw3D</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\xraw3d_anim.h">
+      <Filter>Raw3D</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\xraw3d_assimp_import.h">
+      <Filter>Raw3D</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\src\xraw3d_geom.h">
+      <Filter>Raw3D</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\dependencies\assimp\include\assimp\color4.inl">
+      <Filter>Dependencies\assimp</Filter>
+    </None>
+    <None Include="..\..\dependencies\assimp\include\assimp\config.h.in">
+      <Filter>Dependencies\assimp</Filter>
+    </None>
+    <None Include="..\..\dependencies\assimp\include\assimp\material.inl">
+      <Filter>Dependencies\assimp</Filter>
+    </None>
+    <None Include="..\..\dependencies\assimp\include\assimp\matrix3x3.inl">
+      <Filter>Dependencies\assimp</Filter>
+    </None>
+    <None Include="..\..\dependencies\assimp\include\assimp\matrix4x4.inl">
+      <Filter>Dependencies\assimp</Filter>
+    </None>
+    <None Include="..\..\dependencies\assimp\include\assimp\quaternion.inl">
+      <Filter>Dependencies\assimp</Filter>
+    </None>
+    <None Include="..\..\dependencies\assimp\include\assimp\SmoothingGroups.inl">
+      <Filter>Dependencies\assimp</Filter>
+    </None>
+    <None Include="..\..\dependencies\assimp\include\assimp\vector2.inl">
+      <Filter>Dependencies\assimp</Filter>
+    </None>
+    <None Include="..\..\dependencies\assimp\include\assimp\vector3.inl">
+      <Filter>Dependencies\assimp</Filter>
+    </None>
+  </ItemGroup>
+</Project>
