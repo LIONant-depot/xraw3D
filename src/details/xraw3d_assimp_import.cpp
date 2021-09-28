@@ -131,7 +131,7 @@ struct importer
 
             for( auto i=0u; i<m_pScene->mNumMaterials; ++i )
             {
-                sprintf_s( m_RawGeom.m_MaterialInstance[i].m_Name.data(), m_RawGeom.m_MaterialInstance[i].m_Name.size(), "Materials-%d", i );
+                sprintf_s( m_RawGeom.m_MaterialInstance[i].m_Name.mutable_data(), m_RawGeom.m_MaterialInstance[i].m_Name.size(), "Materials-%d", i );
             }
         }
 
