@@ -1,4 +1,4 @@
-rem @echo OFF
+@echo OFF
 setlocal enabledelayedexpansion
 set XRAW3D_PATH=%cd%
 
