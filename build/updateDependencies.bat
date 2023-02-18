@@ -36,7 +36,7 @@ rem ASSIMP
 rem ------------------------------------------------------------
 :ASSIMP
 rmdir "../dependencies/assimp" /S /Q
-git clone https://github.com/assimp/assimp.git "../dependencies/assimp"
+git clone --branch v5.2.4 https://github.com/assimp/assimp.git "../dependencies/assimp"
 if %ERRORLEVEL% GEQ 1 goto :ERROR
 
 cd ../dependencies/assimp
