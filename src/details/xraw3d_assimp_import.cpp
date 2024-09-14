@@ -3,7 +3,7 @@
 #include "../../assimp/include/assimp/scene.h"
 #include "../../assimp/include/assimp/postprocess.h"
 
-#pragma comment( lib, "dependencies/assimp/BINARIES/Win32/lib/Release/assimp-vc142-mt.lib" )
+#pragma comment( lib, "dependencies/assimp/BINARIES/Win32/lib/Release/assimp-vc143-mt.lib" )
 
 namespace xraw3d::assimp {
 

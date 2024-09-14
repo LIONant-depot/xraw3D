@@ -5,12 +5,6 @@
     <ClCompile Include="..\..\dependencies\xcore\src\xcore.cpp">
       <Filter>Dependencies\xcore</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\dependencies\xcore\src\xcore_profiler_1.cpp">
-      <Filter>Dependencies\xcore</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\dependencies\xcore\src\xcore_profiler_2.cpp">
-      <Filter>Dependencies\xcore</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\src\xraw3d.cpp">
       <Filter>Raw3D</Filter>
     </ClCompile>

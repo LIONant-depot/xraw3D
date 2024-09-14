@@ -42,7 +42,7 @@ if %ERRORLEVEL% GEQ 1 goto :ERROR
 cd ../dependencies/assimp
 if %ERRORLEVEL% GEQ 1 goto :ERROR
 
-cmake CMakeLists.txt -G "Visual Studio 16 2019" -S . -B ./BINARIES/Win32
+cmake CMakeLists.txt -G "Visual Studio 17 2022" -S . -B ./BINARIES/Win32
 if %ERRORLEVEL% GEQ 1 goto :ERROR
 
 cmake --build ./BINARIES/Win32 --config release

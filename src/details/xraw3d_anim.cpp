@@ -90,7 +90,7 @@ void anim::PutBonesInLODOrder( void )
         {
             auto iLodGroupEnd = xcore::string::FindStr( &Bone.m_Name[iLodGroupStart+1], "]" );
             if ( iLodGroupEnd == -1 )
-                throw( std::runtime_error( std::format( "ERROR: We found a bone[{}] with an LOD group but with a missing ']' ", Bone.m_Name )));
+                throw( std::runtime_error( std::format( "ERROR: We found a bone[{}] with an LOD group but with a missing ']' ", Bone.m_Name.c_str() )));
 
             std::array<char,32> Buffer;
             std::int32_t  Length = std::int32_t(iLodGroupEnd - iLodGroupStart);

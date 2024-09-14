@@ -1217,7 +1217,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
             if( Facet.m_iMaterialInstance < 0 ||
                 Facet.m_iMaterialInstance > m_MaterialInstance.size<int>() )
                 throw(std::runtime_error( std::format("Found a face from mesh [{}] which was using an unknow material FaceID={} MaterialID ={}", 
-                    m_Mesh[ Facet.m_iMesh ].m_Name,
+                    m_Mesh[ Facet.m_iMesh ].m_Name.c_str(),
                     i, Facet.m_iMaterialInstance )));
 
             Used[ Facet.m_iMaterialInstance ].m_Used = true;
