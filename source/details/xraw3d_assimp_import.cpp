@@ -1,8 +1,9 @@
 
-#include "../../assimp/include/assimp/Importer.hpp"
-#include "../../assimp/include/assimp/scene.h"
-#include "../../assimp/include/assimp/postprocess.h"
+#include "dependencies/assimp/include/assimp/Importer.hpp"
+#include "dependencies/assimp/include/assimp/scene.h"
+#include "dependencies/assimp/include/assimp/postprocess.h"
 
+#pragma message("**xraw3d_assimp_import.cpp** is adding assimp-vc143-mt.lib")
 #pragma comment( lib, "dependencies/assimp/BINARIES/Win32/lib/Release/assimp-vc143-mt.lib" )
 
 namespace xraw3d::assimp {
@@ -17,11 +18,11 @@ struct texture
 
 struct importer_mesh
 {
-    xraw3d::string                m_Name;
-    std::vector<geom::vertex>     m_Vertices;
-    std::vector<geom::facet>      m_Facets;
-    int                           m_iMaterial;
-    int                           m_nBones;
+    std::string                 m_Name;
+    std::vector<geom::vertex>   m_Vertices;
+    std::vector<geom::facet>    m_Facets;
+    int                         m_iMaterial;
+    int                         m_nBones;
 };
 
 //--------------------------------------------------------------------------------------
@@ -75,8 +76,8 @@ struct importer
                 FaceCount   += ImporterMesh.m_Facets.size();
             }
 
-            if( auto Err = m_RawGeom.m_Vertex.New(VertexCount); Err) throw(std::runtime_error(Err.getCode().m_pString) );
-            if (auto Err = m_RawGeom.m_Facet.New(FaceCount); Err) throw(std::runtime_error(Err.getCode().m_pString));
+            m_RawGeom.m_Vertex.resize(VertexCount);
+            m_RawGeom.m_Facet.resize(FaceCount);
         }
 
         //
@@ -110,14 +111,14 @@ struct importer
         // Copy the meshes
         //
         {
-            if( auto Err = m_RawGeom.m_Mesh.New( m_ImporterMeshes.size() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+            m_RawGeom.m_Mesh.resize( m_ImporterMeshes.size() );
 
             for( auto i=0u; i<m_ImporterMeshes.size(); ++i )
             {
                 auto& Mesh      = m_ImporterMeshes[i];
                 auto& GeomMesh  = m_RawGeom.m_Mesh[i];
                 
-                xcore::string::Copy( GeomMesh.m_Name, Mesh.m_Name );
+                GeomMesh.m_Name   = Mesh.m_Name;
                 GeomMesh.m_nBones = Mesh.m_nBones;
             }
         }
@@ -127,11 +128,11 @@ struct importer
         //
         if( m_pScene->HasMaterials() )
         {
-            if( auto Err = m_RawGeom.m_MaterialInstance.New(m_pScene->mNumMaterials); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+            m_RawGeom.m_MaterialInstance.resize(m_pScene->mNumMaterials);
 
             for( auto i=0u; i<m_pScene->mNumMaterials; ++i )
             {
-                sprintf_s( m_RawGeom.m_MaterialInstance[i].m_Name.mutable_data(), m_RawGeom.m_MaterialInstance[i].m_Name.size(), "Materials-%d", i );
+                m_RawGeom.m_MaterialInstance[i].m_Name = std::format("Materials-{}", i);
             }
         }
 
@@ -183,7 +184,7 @@ struct importer
         {
             geom::vertex Vertex;
 
-            Vertex.m_Position = xcore::vector3
+            Vertex.m_Position = xmath::fvec3
             ( static_cast<float>(AssimpMesh.mVertices[i].x)
             , static_cast<float>(AssimpMesh.mVertices[i].y)
             , static_cast<float>(AssimpMesh.mVertices[i].z)
@@ -194,9 +195,9 @@ struct importer
                 Vertex.m_nUVs = AssimpMesh.GetNumUVChannels();
                 for( int iuv=0; iuv < Vertex.m_nUVs; ++iuv)
                 {
-                    Vertex.m_UV[iuv] = xcore::vector2( static_cast<float>(AssimpMesh.mTextureCoords[iuv][i].x)
-                                                     , static_cast<float>(AssimpMesh.mTextureCoords[iuv][i].y)
-                                                     );
+                    Vertex.m_UV[iuv] = xmath::fvec2( static_cast<float>(AssimpMesh.mTextureCoords[iuv][i].x)
+                                                   , static_cast<float>(AssimpMesh.mTextureCoords[iuv][i].y)
+                                                   );
                 }
             }
             else
@@ -209,11 +210,11 @@ struct importer
                 Vertex.m_nColors = AssimpMesh.GetNumColorChannels();
                 for( int icolor = 0; icolor < Vertex.m_nColors; icolor++ )
                 {
-                    xcore::vector4 RGBA ( static_cast<float>(AssimpMesh.mColors[icolor][i].r)
-                                        , static_cast<float>(AssimpMesh.mColors[icolor][i].g)
-                                        , static_cast<float>(AssimpMesh.mColors[icolor][i].b)
-                                        , static_cast<float>(AssimpMesh.mColors[icolor][i].a)
-                                        );
+                    xmath::fvec4 RGBA ( static_cast<float>(AssimpMesh.mColors[icolor][i].r)
+                                      , static_cast<float>(AssimpMesh.mColors[icolor][i].g)
+                                      , static_cast<float>(AssimpMesh.mColors[icolor][i].b)
+                                      , static_cast<float>(AssimpMesh.mColors[icolor][i].a)
+                                      );
 
                     Vertex.m_Color[icolor].setupFromRGBA( RGBA );
 
@@ -227,7 +228,7 @@ struct importer
             if(AssimpMesh.HasNormals() )
             {
                 Vertex.m_nNormals = 1;
-                Vertex.m_BTN[0].m_Normal = xcore::vector3(AssimpMesh.mNormals[i].x, AssimpMesh.mNormals[i].y, AssimpMesh.mNormals[i].z );
+                Vertex.m_BTN[0].m_Normal = xmath::fvec3(AssimpMesh.mNormals[i].x, AssimpMesh.mNormals[i].y, AssimpMesh.mNormals[i].z );
             }
             else
             {
@@ -238,8 +239,8 @@ struct importer
             {
                 Vertex.m_nTangents  = 1;
                 Vertex.m_nBinormals = 1;
-                Vertex.m_BTN[0].m_Tangent  = xcore::vector3(AssimpMesh.mTangents[i].x, AssimpMesh.mTangents[i].y, AssimpMesh.mTangents[i].z  );
-                Vertex.m_BTN[0].m_Binormal = xcore::vector3(AssimpMesh.mBitangents[i].x, AssimpMesh.mBitangents[i].y, AssimpMesh.mBitangents[i].z);
+                Vertex.m_BTN[0].m_Tangent  = xmath::fvec3(AssimpMesh.mTangents[i].x, AssimpMesh.mTangents[i].y, AssimpMesh.mTangents[i].z  );
+                Vertex.m_BTN[0].m_Binormal = xmath::fvec3(AssimpMesh.mBitangents[i].x, AssimpMesh.mBitangents[i].y, AssimpMesh.mBitangents[i].z);
             }
             else
             {
@@ -303,7 +304,7 @@ struct importer
         // Copy importer_mesh related info
         //
         ImporterMesh.m_nBones = AssimpMesh.mNumBones;
-        xcore::string::Copy( ImporterMesh.m_Name, AssimpMesh.mName.C_Str() );
+        ImporterMesh.m_Name   = AssimpMesh.mName.C_Str();
 
         // Done
         return ImporterMesh;

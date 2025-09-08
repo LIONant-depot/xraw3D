@@ -15,18 +15,18 @@ namespace xraw3d
 
         struct bone
         {
-            string                                          m_Name;
+            std::string                                     m_Name;
             std::int32_t                                    m_nChildren;
             std::int32_t                                    m_iParent;
-            xcore::vector3                                  m_Scale;
-            xcore::quaternion                               m_Rotation;
-            xcore::vector3                                  m_Position;
-            xcore::bbox                                     m_BBox;
+            xmath::fvec3                                    m_Scale;
+            xmath::fquat                                    m_Rotation;
+            xmath::fvec3                                    m_Position;
+            xmath::fbbox                                    m_BBox;
         };
 
         struct mesh
         {
-            string                                          m_Name;
+            std::string                                     m_Name;
             std::int32_t                                    m_nBones;
 
             const mesh& operator = ( const mesh&A )
@@ -45,14 +45,14 @@ namespace xraw3d
 
         struct btn
         {
-            xcore::vector3                                  m_Binormal;
-            xcore::vector3                                  m_Tangent;
-            xcore::vector3                                  m_Normal;
+            xmath::fvec3                                    m_Binormal;
+            xmath::fvec3                                    m_Tangent;
+            xmath::fvec3                                    m_Normal;
         };
 
         struct vertex
         {
-            xcore::vector3                                  m_Position;
+            xmath::fvec3                                    m_Position;
 
             std::int32_t                                    m_iFrame        = 0;
             std::int32_t                                    m_nWeights      = 0;
@@ -62,8 +62,8 @@ namespace xraw3d
             std::int32_t                                    m_nUVs          = 0;
             std::int32_t                                    m_nColors       = 0;
 
-            std::array<xcore::vector2,vertex_max_uv_v>      m_UV;
-            std::array<xcore::icolor, vertex_max_colors_v>  m_Color;
+            std::array<xmath::fvec2,  vertex_max_uv_v>      m_UV;
+            std::array<xcolori,       vertex_max_colors_v>  m_Color;
             std::array<weight,        vertex_max_weights_v> m_Weight;
             std::array<btn,           vertex_max_normals_v> m_BTN;
         };
@@ -74,11 +74,11 @@ namespace xraw3d
             std::int32_t                                    m_nVertices;
             std::array<std::int32_t,facet_max_vertices_v>   m_iVertex;
             std::int32_t                                    m_iMaterialInstance;
-            xcore::plane                                    m_Plane;
+            xmath::fplane                                   m_Plane;
         };
 
         // Material refers to a material instance not a material-shader/type
-        // The material insance has a reference of the material shader such multiple instances
+        // The material instance has a reference of the material shader such multiple instances
         // could in refer to the same material shader. Ideally a mesh should just point to
         // an actual material instance so that hopefully many meshes use a single instance.
         // this will the best case in terms of performance. Because all the meshes that can be
@@ -101,15 +101,15 @@ namespace xraw3d
             static auto& getTypeString( params_type e )
             {
                 static constexpr auto strings_v = std::array
-                { xcore::string::constant{ "NULL"    }
-                , xcore::string::constant{ "BOOL"    }
-                , xcore::string::constant{ "F1"      }
-                , xcore::string::constant{ "F2"      }
-                , xcore::string::constant{ "F3"      }
-                , xcore::string::constant{ "F4"      }
-                , xcore::string::constant{ "TEXTURE" }
+                { std::string_view{ "NULL"    }
+                , std::string_view{ "BOOL"    }
+                , std::string_view{ "F1"      }
+                , std::string_view{ "F2"      }
+                , std::string_view{ "F3"      }
+                , std::string_view{ "F4"      }
+                , std::string_view{ "TEXTURE" }
                 };
-                return strings_v[ int(e) ];
+                return strings_v[ static_cast<int>(e) ];
             }
 
             struct params
@@ -137,17 +137,17 @@ namespace xraw3d
                 return *this;
             }
 
-            string                                      m_Name;
-            string                                      m_MaterialShader;
-            string                                      m_Technique;
-            xcore::vector<params>                       m_Params;
+            std::string                                 m_Name;
+            std::string                                 m_MaterialShader;
+            std::string                                 m_Technique;
+            std::vector<params>                         m_Params;
         };
 
     public:
 
         void                    Serialize                   ( bool                          isRead
-                                                            , const char*                   pFileName
-                                                            , xcore::textfile::file_type    Type      = xcore::textfile::file_type::BINARY
+                                                            , std::wstring_view             FileName
+                                                            , xtextfile::file_type          Type      = xtextfile::file_type::BINARY
                                                             );
         void                    Kill                        ( void 
                                                             );
@@ -160,14 +160,14 @@ namespace xraw3d
                                                             );
         void                    ForceAddColorIfNone         ( void 
                                                             );
-        void                    CollapseMeshes              ( const char*                   pMeshName 
+        void                    CollapseMeshes              ( std::string_view              MeshName 
                                                             );
-        void                    CollapseNormals             ( xcore::radian                 ThresholdAngle = 20_xdeg 
+        void                    CollapseNormals             ( xmath::radian                 ThresholdAngle = xmath::radian(xmath::DegToRad(20.0f))
                                                             );
-        xcore::bbox             getBBox                     ( void 
-                                                            );
+        xmath::fbbox            getBBox                     ( void 
+                                                            ) const;
         void                    ComputeMeshBBox             ( std::int32_t                  iMesh
-                                                            , xcore::bbox&                  BBox 
+                                                            , xmath::fbbox&                 BBox 
                                                             );
         void                    ComputeBoneInfo             ( void 
                                                             );
@@ -175,16 +175,16 @@ namespace xraw3d
                                                             , geom&                         NewMesh
                                                             , bool                          RemoveFromRawMesh = false 
                                                             );
-        bool                    IsolateMesh                 ( const char* pMeshName
+        bool                    IsolateMesh                 ( std::string_view              MeshName
                                                             , geom&                         NewMesh 
                                                             );
         bool                    isBoneUsed                  ( std::int32_t                  iBone 
                                                             );
-        std::int32_t            getBoneIDFromName           ( const char*                   pBoneName 
+        std::int32_t            getBoneIDFromName           ( std::string_view              BoneName 
                                                             ) const;
         void                    DeleteBone                  ( std::int32_t                  iBone 
                                                             );
-        void                    DeleteBone                  ( const char*                   pBoneName 
+        void                    DeleteBone                  ( std::string_view              BoneName 
                                                             );        
         void                    ApplyNewSkeleton            ( const anim&                   RawAnim 
                                                             );
@@ -202,11 +202,11 @@ namespace xraw3d
                                                             );
     public:
 
-        xcore::unique_span<bone>                  m_Bone;
-        xcore::unique_span<vertex>                m_Vertex;
-        xcore::unique_span<facet>                 m_Facet;
-        xcore::unique_span<material_instance>     m_MaterialInstance;
-        xcore::unique_span<mesh>                  m_Mesh;
+        std::vector<bone>                  m_Bone;
+        std::vector<vertex>                m_Vertex;
+        std::vector<facet>                 m_Facet;
+        std::vector<material_instance>     m_MaterialInstance;
+        std::vector<mesh>                  m_Mesh;
     };
 
 } // xraw3d

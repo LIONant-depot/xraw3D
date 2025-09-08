@@ -3,12 +3,9 @@
 #pragma once
 
 #include <format>
-#include "xcore.h"
-
-namespace xraw3d
-{
-    using string = xcore::string::ref<char>;
-}
+#include "dependencies/xmath/source/xmath.h"
+#include "dependencies/xbitmap/source/xcolor.h"
+#include "dependencies/xtextfile/source/xtextfile.h"
 
 #include "xraw3d_anim.h"
 #include "xraw3d_geom.h"

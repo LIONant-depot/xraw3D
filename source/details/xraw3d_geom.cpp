@@ -20,30 +20,28 @@ void geom::Kill(void)
 //--------------------------------------------------------------------------
 
 void geom::Serialize
-( bool                          isRead
-, const char*                   pFileName
-, xcore::textfile::file_type    FileType
+( bool                      isRead
+, std::wstring_view         FileName
+, xtextfile::file_type      FileType
 )
 {
     Kill();
 
-    xcore::textfile::stream File;
-    xcore::err              Error;
+    xtextfile::stream File;
 
-    if (auto Err = File.Open(isRead, pFileName, FileType); Err)
-        throw(std::runtime_error(Err.getCode().m_pString));
+    if (auto Err = File.Open(isRead, FileName, FileType); Err)
+        throw(std::runtime_error( std::string(Err.getMessage() )));
 
     if( isRead == false || File.getRecordName() == "Hierarchy" )
     {
-        if( File.Record
-            ( Error
-            , "Hierarchy"
-            , [&]( std::size_t& C, xcore::err& Err )
+        if( auto Err = File.Record
+            ( "Hierarchy"
+            , [&]( std::size_t& C, xerr& Err )
             {
-                if(isRead) Err = m_Bone.New( C );
+                if(isRead) m_Bone.resize( C );
                 else       C   = m_Bone.size();
             }
-            , [&](std::size_t I, xcore::err& Err )
+            , [&](std::size_t I, xerr& Err )
             {
                 int Index = int(I);
                 if (Err = File.Field("Index", Index)) return;
@@ -57,20 +55,19 @@ void geom::Serialize
                 || (Err = File.Field( "Pos",        Bone.m_Position.m_X, Bone.m_Position.m_Y, Bone.m_Position.m_Z )                       )
                 ;
             })
-        ) throw(std::runtime_error(Error.getCode().m_pString));
+        ; Err ) throw(std::runtime_error(std::string(Err.getMessage())));
     }
 
     if( isRead == false || File.getRecordName() == "MaterialInstance" )
     {
-        if( File.Record
-            ( Error
-            , "MaterialInstance"
-            , [&]( std::size_t& C, xcore::err& Err )
+        if( auto Err = File.Record
+            ( "MaterialInstance"
+            , [&]( std::size_t& C, xerr& Err )
             {
-                if(isRead) Err = m_MaterialInstance.New( C );
+                if(isRead) m_MaterialInstance.resize( C );
                 else       C   = m_MaterialInstance.size();
             }
-            , [&](std::size_t I, xcore::err& Err )
+            , [&](std::size_t I, xerr& Err )
             {
                 int Index = int(I);
                 if (Err = File.Field("Index", Index)) return;
@@ -88,10 +85,10 @@ void geom::Serialize
                 // If we are loading then lets preallocate all the parameters
                 if( isRead == false )
                 {
-                    MaterialInstance.m_Params.appendList(nParams);
+                    MaterialInstance.m_Params.resize(MaterialInstance.m_Params.size() + nParams);
                 }
             })
-        ) throw(std::runtime_error(Error.getCode().m_pString));
+        ; Err ) throw(std::runtime_error(std::string(Err.getMessage())));
 
         //
         // Read all the parameters for each of the instancces
@@ -99,12 +96,11 @@ void geom::Serialize
         int iMaterial = 0;
         int iParam    = 0;
 
-        if( File.Record
-            ( Error
-            , "MaterialInstanceParams"
-            , [&]( std::size_t& C, xcore::err& Err )
+        if( auto Err = File.Record
+            ( "MaterialInstanceParams"
+            , [&]( std::size_t& C, xerr& Err )
             {
-                if(isRead) Err = m_MaterialInstance.New( C );
+                if(isRead) m_MaterialInstance.resize( C );
                 else
                 {
                     // For writting we need to determine how many items we need to write
@@ -113,7 +109,7 @@ void geom::Serialize
                     // If need to write items which is the first item?
                     if(C)
                     {
-                        for( int i=0; i< m_MaterialInstance.size<int>(); ++i )
+                        for( int i=0; i< m_MaterialInstance.size(); ++i )
                         {
                             auto& MatI = m_MaterialInstance[i];
                             if( MatI.m_Params.size() )
@@ -126,7 +122,7 @@ void geom::Serialize
                     }
                 }
             }
-            , [&](std::size_t I, xcore::err& Err )
+            , [&](std::size_t I, xerr& Err )
             {
                    ( Err = File.Field("iMaterialInstance", iMaterial) )
                 || ( Err = File.Field("iParam",            iParam)    )
@@ -135,13 +131,15 @@ void geom::Serialize
 
                 auto& Param = m_MaterialInstance[iMaterial].m_Params[iParam];
 
-                string TypeName = isRead ? xcore::string::constant{ "" } : material_instance::getTypeString(Param.m_Type);
-                xcore::string::view NameView(Param.m_Name.data(), Param.m_Name.size());
-                xcore::string::view ValueView(Param.m_Value.data(), Param.m_Value.size());
+                std::string TypeName;
+                if (isRead == false) TypeName = material_instance::getTypeString(Param.m_Type);
 
-                   ( Err = File.Field("Name", NameView              ))
-                || ( Err = File.Field("Type", TypeName              ))
-                || ( Err = File.Field("Value", ValueView            ))
+                std::string NameView  = Param.m_Name.data();
+                std::string ValueView = Param.m_Value.data();
+
+                   ( Err = File.Field("Name",  NameView     ))
+                || ( Err = File.Field("Type",  TypeName     ))
+                || ( Err = File.Field("Value", ValueView    ))
                 ;
                 if (Err) return;
 
@@ -152,7 +150,7 @@ void geom::Serialize
                     for( int i=1, end_i = int(material_instance::params_type::ENUM_COUNT); i < end_i; ++i )
                     {
                         const auto e = static_cast<material_instance::params_type>(i);
-                        if( xcore::string::CompareI( &TypeName[i], material_instance::getTypeString(e) ) == 0 )
+                        if( xstrtool::CompareI( &TypeName[i], material_instance::getTypeString(e) ) == 0 )
                         {
                             Param.m_Type = e;
                             break;
@@ -172,7 +170,7 @@ void geom::Serialize
                     
                 }
             })
-         ) throw(std::runtime_error(Error.getCode().m_pString));
+         ; Err ) throw(std::runtime_error(std::string(Err.getMessage())));
 
     } // material instances and params
     
@@ -182,19 +180,18 @@ void geom::Serialize
     int nColors    = 0;
     int nWeights   = 0;
 
-    if( File.Record
-        ( Error
-        , "Vertices"
-        , [&]( std::size_t& C, xcore::err& Err )
+    if( auto Err = File.Record
+        ( "Vertices"
+        , [&]( std::size_t& C, xerr& Err )
         {
             if(isRead) 
             {
-                if( Err = m_Vertex.Alloc( C ) ) return;
-                std::memset( m_Vertex.data(), 0, m_Vertex.getByteSize() );
+                m_Vertex.resize( C );
+                std::memset( m_Vertex.data(), 0, m_Vertex.size() * sizeof(m_Vertex[0]));
             }
             else       C   = m_Vertex.size();
         }
-        , [&](std::size_t I, xcore::err& Err )
+        , [&](std::size_t I, xerr& Err )
         {
             int Index = int(I);
             if (Err = File.Field("Index", Index)) return;
@@ -216,7 +213,7 @@ void geom::Serialize
            nColors    += Vertex.m_nColors  ;
            nWeights   += Vertex.m_nWeights ;
         })
-     ) throw(std::runtime_error(Error.getCode().m_pString));
+     ; Err ) throw(std::runtime_error(std::string(Err.getMessage())));
     
 
     if( isRead == false || File.getRecordName() == "Colors" )
@@ -224,15 +221,14 @@ void geom::Serialize
         int iColor  = 0;
         int iVertex = 0;
 
-        if( File.Record
-            ( Error
-            , "Colors"
-            , [&]( std::size_t& C, xcore::err& Err )
+        if( auto Err = File.Record
+            ( "Colors"
+            , [&]( std::size_t& C, xerr& Err )
             {
-                if(isRead) xassert( C == nColors );
+                if(isRead){ assert( C == nColors ); }
                 else       C   = nColors;
             }
-            , [&](std::size_t, xcore::err& Err )
+            , [&](std::size_t, xerr& Err )
             {
                 // Skip writing vertices that don't have colors
                 if( isRead == false )
@@ -255,11 +251,11 @@ void geom::Serialize
                     iColor  = 0;
                 }
 
-                xcore::vector4 FColor = C.getRGBA();
+                xmath::fvec4 FColor = C.getRGBA();
                 if( Err = File.Field("Color", FColor.m_X, FColor.m_Y, FColor.m_Z, FColor.m_W) ) return;
                 if( isRead ) C.setupFromRGBA( FColor );
             })
-         ) throw(std::runtime_error(Error.getCode().m_pString));
+         ; Err ) throw(std::runtime_error(std::string(Err.getMessage())));
     }
     
     if( isRead == false || File.getRecordName() == "BTNs" )
@@ -267,15 +263,14 @@ void geom::Serialize
         int iBTN    = 0;
         int iVertex = 0;
 
-        if( File.Record
-            ( Error
-            , "BTNs"
-            , [&]( std::size_t& C, xcore::err& Err )
+        if( auto Err = File.Record
+            ( "BTNs"
+            , [&]( std::size_t& C, xerr& Err )
             {
-                if(isRead) xassert( C == nBTNs);
+                if(isRead) { assert( C == nBTNs); }
                 else       C   = nBTNs;
             }
-            , [&](std::size_t, xcore::err& Err )
+            , [&](std::size_t, xerr& Err )
             {
                 // Skip writing vertices that don't have btns
                 if (isRead == false)
@@ -307,7 +302,7 @@ void geom::Serialize
                 || (Err = File.Field("Normals",   BTN.m_Normal.m_X,   BTN.m_Normal.m_Y,   BTN.m_Normal.m_Z))
                 ;
             })
-         ) throw(std::runtime_error(Error.getCode().m_pString));
+         ; Err ) throw(std::runtime_error( std::string(Err.getMessage())));
     }
 
 
@@ -316,15 +311,14 @@ void geom::Serialize
         int iUVs    = 0;
         int iVertex = 0;
 
-        if( File.Record
-            ( Error
-            , "UVs"
-            , [&]( std::size_t& C, xcore::err& Err )
+        if( auto Err = File.Record
+            ( "UVs"
+            , [&]( std::size_t& C, xerr& Err )
             {
-                if(isRead) xassert( C == nUVSets );
+                if(isRead) { assert( C == nUVSets ); }
                 else       C   = nUVSets;
             }
-            , [&](std::size_t, xcore::err& Err )
+            , [&](std::size_t, xerr& Err )
             {
                 // Skip writing vertices that don't have colors
                 if( isRead == false )
@@ -349,7 +343,7 @@ void geom::Serialize
 
                 Err = File.Field("UV", UV.m_X, UV.m_Y );
             })
-         ) throw(std::runtime_error(Error.getCode().m_pString));
+         ) throw(std::runtime_error( std::string(Err.getMessage())));
     }
 
     if( isRead == false || File.getRecordName() == "Skin" )
@@ -357,15 +351,14 @@ void geom::Serialize
         int iWeight = 0;
         int iVertex = 0;
 
-        if( File.Record
-            ( Error
-            , "Skin"
-            , [&]( std::size_t& C, xcore::err& Err )
+        if( auto Err = File.Record
+            ( "Skin"
+            , [&]( std::size_t& C, xerr& Err )
             {
-                if(isRead) xassert( C == nWeights);
+                if(isRead) { assert( C == nWeights); }
                 else       C   = nWeights;
             }
-            , [&](std::size_t, xcore::err& Err )
+            , [&](std::size_t, xerr& Err )
             {
                 // Skip writing vertices that don't have colors
                 if( isRead == false )
@@ -392,23 +385,22 @@ void geom::Serialize
                 || ( Err =  File.Field("Weight", Weight.m_Weight))
                 ;
             })
-         ) throw(std::runtime_error(Error.getCode().m_pString));
+         ) throw(std::runtime_error( std::string(Err.getMessage())));
     }
 
     int nIndices = 0;
-    if( File.Record
-        ( Error
-        , "Polygons"
-        , [&]( std::size_t& C, xcore::err& Err )
+    if( auto Err = File.Record
+        ( "Polygons"
+        , [&]( std::size_t& C, xerr& Err )
         {
             if(isRead) 
             {
-                if( Err = m_Facet.Alloc( C ) ) return;
-                std::memset(m_Facet.data(), 0, m_Facet.getByteSize());
+                m_Facet.resize( C );
+                std::memset(m_Facet.data(), 0, m_Facet.size() * sizeof(m_Facet[0]));
             }
-            else       C   = m_Facet.size<int>();
+            else       C   = m_Facet.size();
         }
-        , [&](std::size_t I, xcore::err& Err )
+        , [&](std::size_t I, xerr& Err )
         {
             auto& Facet = m_Facet[I];
 
@@ -423,20 +415,19 @@ void geom::Serialize
 
             if( !Err ) nIndices += Facet.m_nVertices;
         })
-     ) throw(std::runtime_error(Error.getCode().m_pString));
+     ; Err ) throw(std::runtime_error( std::string(Err.getMessage())));
 
     {
         int iIndex = 0;
         int iFacet = 0;
-        if( File.Record
-            ( Error
-            , "FacetIndex"
-            , [&]( std::size_t& C, xcore::err& Err )
+        if( auto Err = File.Record
+            ( "FacetIndex"
+            , [&]( std::size_t& C, xerr& Err )
             {
-                if(isRead) xassert( C == nIndices );
+                if(isRead) assert( C == nIndices );
                 else       C   = nIndices;
             }
-            , [&](std::size_t, xcore::err& Err )
+            , [&](std::size_t, xerr& Err )
             {
                    (Err = File.Field("iFacet", iFacet)      )
                 || (Err = File.Field("Index",  iIndex)      )
@@ -453,24 +444,23 @@ void geom::Serialize
 
                 Err = File.Field("iVertex", Index );
             })
-         ) throw(std::runtime_error(Error.getCode().m_pString));
+         ; Err ) throw( std::runtime_error(std::string(Err.getMessage())));
     }
 
     if (isRead == false || File.getRecordName() == "Mesh")
     {
-        if( File.Record
-            ( Error
-            , "Mesh"
-            , [&]( std::size_t& C, xcore::err& Err )
+        if( auto Err = File.Record
+            ( "Mesh"
+            , [&]( std::size_t& C, xerr& Err )
             {
-                if(isRead) Err = m_Mesh.New( C );
+                if(isRead) m_Mesh.resize( C );
                 else       C   = nIndices;
             }
-            , [&](std::size_t I, xcore::err& Err )
+            , [&](std::size_t I, xerr& Err )
             {
                 Err = File.Field("Name", m_Mesh[I].m_Name);
             })
-         ) throw(std::runtime_error(Error.getCode().m_pString));
+         ) throw(std::runtime_error( std::string(Err.getMessage())));
 
         if (isRead)
         {
@@ -478,11 +468,12 @@ void geom::Serialize
             for( mesh& Mesh : m_Mesh )
             {
                 int Count = 0;
-                for( int j =  1 + m_Mesh.getIndexByEntry<int>(Mesh); j < m_Mesh.size<int>(); j++ )
+                const auto Index = static_cast<int>( &Mesh - m_Mesh.data() );
+                for( int j =  1 + Index; j < m_Mesh.size(); j++ )
                 {
-                    if ( xcore::string::CompareI( Mesh.m_Name, m_Mesh[j].m_Name ) == 0 )
+                    if ( xstrtool::CompareI( Mesh.m_Name, m_Mesh[j].m_Name ) == 0 )
                     {
-                         m_Mesh[j].m_Name = xcore::string::Fmt( "%s__%d", (const char*)m_Mesh[j].m_Name, Count++ );
+                         m_Mesh[j].m_Name = std::format( "{}__{}", m_Mesh[j].m_Name, Count++ );
                     }
                 }
             }
@@ -495,11 +486,11 @@ void geom::Serialize
 
 //--------------------------------------------------------------------------
 
-xcore::bbox geom::getBBox( void )
+xmath::fbbox geom::getBBox( void ) const
 {
-    xcore::bbox BBox;
+    xmath::fbbox BBox;
     BBox.setZero();
-    for( std::int32_t i=0; i<m_Vertex.size<int>(); i++ )
+    for( std::int32_t i=0; i<m_Vertex.size(); i++ )
     {
         BBox += m_Vertex[i].m_Position;
     }
@@ -510,7 +501,7 @@ xcore::bbox geom::getBBox( void )
 
 void geom::SortFacetsByMaterial( void )
 {
-    std::qsort( &m_Facet[0], m_Facet.size<int>(), sizeof(facet),
+    std::qsort( &m_Facet[0], m_Facet.size(), sizeof(facet),
             [](const void* paA, const void* paB ) -> std::int32_t
             {
                 const geom::facet* pA = (const geom::facet*)paA;
@@ -532,7 +523,7 @@ void geom::SortFacetsByMeshMaterialBone( void )
     
    g_pCompare = this;
     
-   std::qsort( &m_Facet[0], m_Facet.size<int>(), sizeof(facet),
+   std::qsort( &m_Facet[0], m_Facet.size(), sizeof(facet),
             [](const void* paA, const void* paB ) -> std::int32_t
             {
                 const geom::facet* pA = (const geom::facet*)paA;
@@ -568,7 +559,7 @@ bool geom::TempVCompare( const vertex& A, const vertex& B )
     // Check position first
     {
         static const float PEpsilon = 0.001f; 
-        xcore::vector3 T;
+        xmath::fvec3 T;
         T = A.m_Position - B.m_Position;
         float d = T.Dot( T );
         if( d > PEpsilon ) return false;
@@ -587,7 +578,7 @@ bool geom::TempVCompare( const vertex& A, const vertex& B )
     for( i=0; i<A.m_nNormals; i++ )
     {
         static const float NEpsilon = 0.001f;
-        xcore::vector3 T;
+        xmath::fvec3 T;
         T = B.m_BTN[ i ].m_Normal - A.m_BTN[ i ].m_Normal;
         float d = T.Dot( T );
         if( d > NEpsilon ) return false;
@@ -597,7 +588,7 @@ bool geom::TempVCompare( const vertex& A, const vertex& B )
     for( i=0; i<A.m_nTangents; i++ )
     {
         static const float NEpsilon = 0.001f;
-        xcore::vector3 T;
+        xmath::fvec3 T;
         T = B.m_BTN[ i ].m_Tangent - A.m_BTN[ i ].m_Tangent;
         float d = T.Dot( T );
         if( d > NEpsilon ) return false;
@@ -607,7 +598,7 @@ bool geom::TempVCompare( const vertex& A, const vertex& B )
     for( i=0; i<A.m_nBinormals; i++ )
     {
         static const float NEpsilon = 0.001f;
-        xcore::vector3 T;
+        xmath::fvec3 T;
         T = B.m_BTN[ i ].m_Binormal - A.m_BTN[ i ].m_Binormal;
         float d = T.Dot( T );
         if( d > NEpsilon ) return false;
@@ -617,7 +608,7 @@ bool geom::TempVCompare( const vertex& A, const vertex& B )
     for( i=0; i<A.m_nUVs; i++ )
     {
         static const float UVEpsilon = 0.001f;
-        xcore::vector2 T;
+        xmath::fvec2 T;
         T = B.m_UV[i] - A.m_UV[i];
         float d = T.Dot( T );
         if( d > UVEpsilon ) return false;
@@ -627,10 +618,10 @@ bool geom::TempVCompare( const vertex& A, const vertex& B )
     for( i=0; i<A.m_nColors; i++ )
     {
         static const float CEpsilon = 3.0f;
-        xcore::vector4 C1( A.m_Color[i].m_R, A.m_Color[i].m_G, A.m_Color[i].m_B, A.m_Color[i].m_A );
-        xcore::vector4 C2( B.m_Color[i].m_R, B.m_Color[i].m_G, B.m_Color[i].m_B, B.m_Color[i].m_A );
+        xmath::fvec4 C1( A.m_Color[i].m_R, A.m_Color[i].m_G, A.m_Color[i].m_B, A.m_Color[i].m_A );
+        xmath::fvec4 C2( B.m_Color[i].m_R, B.m_Color[i].m_G, B.m_Color[i].m_B, B.m_Color[i].m_A );
 
-        xcore::vector4 T = C1 - C2;
+        xmath::fvec4 T = C1 - C2;
         float d = T.Dot( T );
         if( d > CEpsilon ) return false;
     }
@@ -693,7 +684,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
     // Make sure that all normals are normalied
     //
     {
-        for ( std::int32_t i = 0; i < m_Vertex.size<int>(); i++ )
+        for ( std::int32_t i = 0; i < m_Vertex.size(); i++ )
         {
             auto& Vertex = m_Vertex[i];
 
@@ -719,7 +710,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
     //
     {
         std::int32_t i, j, k;
-        for ( i = 0; i < m_Vertex.size<int>(); i++ )
+        for ( i = 0; i < m_Vertex.size(); i++ )
         {
             for ( j = 0; j < m_Vertex[ i ].m_nWeights; j++ )
             {
@@ -758,20 +749,20 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
             std::int32_t     m_iNext;          // next node in the has
         };
 
-        if ( m_Vertex.size<int>() <= 0 )
+        if ( m_Vertex.size() <= 0 )
             throw(std::runtime_error( "geom has not vertices" ));
 
         std::int32_t                i;
-        xcore::unique_span<hash>    Hash;
-        xcore::unique_span<tempv>   TempV;
-        const std::int32_t          HashDimension  = std::max( 20, std::int32_t(std::sqrtf((float)m_Vertex.size<int>())) );
+        std::vector<hash>           Hash;
+        std::vector<tempv>          TempV;
+        const std::int32_t          HashDimension  = std::max( 20, std::int32_t(std::sqrtf((float)m_Vertex.size())) );
         const std::int32_t          HashSize       = HashDimension * HashDimension;
         float                       MaxX, MinX, XShift;
         float                       MaxZ, MinZ, ZShift;
 
         // Allocate memory
-        if( auto Err = Hash.New( HashSize ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-        if (auto Err = TempV.New( m_Vertex.size<int>() ); Err) throw(std::runtime_error(Err.getCode().m_pString));
+        Hash.resize( HashSize );
+        TempV.resize( m_Vertex.size() );
 
         // Initialize the hash with terminators
         for ( i = 0; i < HashSize; i++ )
@@ -786,7 +777,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         MinZ = MaxZ;
         {
             std::int32_t TotalCrazyVerts = 0;
-            for ( i = 0; i < m_Vertex.size<int>(); i++ )
+            for ( i = 0; i < m_Vertex.size(); i++ )
             {
                 static const float CrazyMax = 10000.f;
 
@@ -832,15 +823,15 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         // Hash all the vertices into the hash table
         XShift = ( HashDimension - 1 ) / ( (MaxX - MinX) + 1 );
         ZShift = ( HashDimension - 1 ) / ( (MaxZ - MinZ) + 1 );
-        for ( i = 0; i < m_Vertex.size<int>(); i++ )
+        for ( i = 0; i < m_Vertex.size(); i++ )
         {
             const std::int32_t XOffSet = (std::int32_t)std::clamp( ( ( m_Vertex[ i ].m_Position.m_X - MinX ) * XShift ), 0.f, (float)HashDimension );
             const std::int32_t ZOffSet = (std::int32_t)std::clamp( ( ( m_Vertex[ i ].m_Position.m_Z - MinZ ) * ZShift ), 0.f, (float)HashDimension );
 
-            xassert( XOffSet >= 0 );
-            xassert( XOffSet < HashDimension );
-            xassert( ZOffSet >= 0 );
-            xassert( ZOffSet < HashDimension );
+            assert( XOffSet >= 0 );
+            assert( XOffSet < HashDimension );
+            assert( ZOffSet >= 0 );
+            assert( ZOffSet < HashDimension );
 
             const std::int32_t   iEntry      = XOffSet + HashDimension * ZOffSet;
             hash&       HashEntry   = Hash[ iEntry ];
@@ -849,7 +840,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
             HashEntry.m_iNext       = i;
         }
 
-        xcore::scheduler::channel BlockJobs( xconst_universal_str("CleanMesh") );
+        //xcore::scheduler::channel BlockJobs( xconst_universal_str("CleanMesh") );
 
         // Now do a seach for each vertex
         for ( std::int32_t i = 0; i < HashSize; i++ )
@@ -876,7 +867,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
                     const hash& ExploreHash = Hash[ iHash ];
                     const bool bSameHash   = iHash == i;
 
-                    BlockJobs.SubmitJob( [this, &ExploreHash, &TempVKeyEntry, k, &TempV, bSameHash ]()
+                  //  BlockJobs.SubmitJob( [this, &ExploreHash, &TempVKeyEntry, k, &TempV, bSameHash ]()
                     {
                         std::int32_t TotalEntryPerCell = 0;
                         std::int32_t iStartNode;
@@ -893,7 +884,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
 
                             TotalEntryPerCell++;
 
-                            xassert ( &VEntryTest != &TempVKeyEntry );
+                            assert ( &VEntryTest != &TempVKeyEntry );
 
                             // This vertex has been remap
                             if ( VEntryTest.m_RemapIndex != VEntryTest.m_Index )
@@ -904,18 +895,19 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
                                 VEntryTest.m_RemapIndex = TempVKeyEntry.m_RemapIndex;
                         }
 
-                        xassert( TotalEntryPerCell < (m_Vertex.size<int>()/4) );
-                    });
+                        assert( TotalEntryPerCell < (m_Vertex.size()/4) );
+                    }
+                    //);
                 }
 
-                BlockJobs.join();
+                //BlockJobs.join();
             }
         }
         RMESH_SANITY
 
         // Okay now we must collapse all the unuse vertices
         std::int32_t nVerts = 0;
-        for ( i = 0; i < m_Vertex.size<int>(); i++ )
+        for ( i = 0; i < m_Vertex.size(); i++ )
         {
             if ( TempV[ i ].m_RemapIndex == TempV[ i ].m_Index )
             {
@@ -928,7 +920,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         RMESH_SANITY
 
         // OKay now get all the facets and remap their indices
-        for ( i = 0; i < m_Facet.size<int>(); i++ )
+        for ( i = 0; i < m_Facet.size(); i++ )
         for ( std::int32_t j = 0; j < m_Facet[ i ].m_nVertices; j++ )
         {
             std::int32_t&    iVert  = m_Facet[ i ].m_iVertex[ j ];
@@ -941,17 +933,17 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
             else
             {
                 iVert = TempV[ iRemap ].m_RemapIndex;
-                xassert( TempV[ iRemap ].m_Index == -1 );
+                assert( TempV[ iRemap ].m_Index == -1 );
             }
         }
 
         RMESH_SANITY
 
         // Now copy the vertices to their final location
-        xcore::unique_span<vertex>    Vertex;
-        if( auto Err = Vertex.Alloc( nVerts ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+        std::vector<vertex>    Vertex;
+        Vertex.resize( nVerts );
 
-        for ( i = 0; i < m_Vertex.size<int>(); i++ )
+        for ( i = 0; i < m_Vertex.size(); i++ )
         {
             std::int32_t iRemap = TempV[ i ].m_RemapIndex;
 
@@ -970,7 +962,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         RMESH_SANITY
 
         // Finally set the new count and
-        TotalVerticesRemoved += m_Vertex.size<int>() - nVerts;
+        TotalVerticesRemoved += static_cast<int>(m_Vertex.size() - nVerts);
         m_Vertex = std::move(Vertex);
 
         RMESH_SANITY
@@ -985,14 +977,14 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         std::int32_t i;
         std::int32_t nFacets = 0;
 
-        for ( i = 0; i < m_Facet.size<int>(); i++ )
+        for ( i = 0; i < m_Facet.size(); i++ )
         {
-            xcore::vector3 Normal = m_Vertex[ m_Facet[ i ].m_iVertex[ 1 ] ].m_Position - m_Vertex[ m_Facet[ i ].m_iVertex[ 0 ] ].m_Position.Cross(
+            xmath::fvec3 Normal = m_Vertex[ m_Facet[ i ].m_iVertex[ 1 ] ].m_Position - m_Vertex[ m_Facet[ i ].m_iVertex[ 0 ] ].m_Position.Cross(
                 m_Vertex[ m_Facet[ i ].m_iVertex[ 2 ] ].m_Position - m_Vertex[ m_Facet[ i ].m_iVertex[ 0 ] ].m_Position );
 
             // Remove this facet if we're dumping out this Mesh.
             if ( ( iMesh != -1 && m_Facet[ i ].m_iMesh == iMesh )
-                || Normal.getLength() < 0.00001f )
+                || Normal.Length() < 0.00001f )
             {
                 // Skip Facet
                 //x_DebugMsg("Removing face %1d, (%1d,%1d,%1d)\n",i,m_pFacet[i].iVertex[0],m_pFacet[i].iVertex[1],m_pFacet[i].iVertex[2]);
@@ -1005,13 +997,13 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         }
 
         // Set the new count
-        TotalFacetsRemoved += m_Facet.size<int>() - nFacets;
+        TotalFacetsRemoved += static_cast<int>(m_Facet.size() - nFacets);
 
         if ( TotalFacetsRemoved )
-            if( auto Err = m_Facet.resize( nFacets ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+            m_Facet.resize( nFacets );
 
         // No facets left!
-        if ( m_Facet.size<int>() <= 0 )
+        if ( m_Facet.size() <= 0 )
             throw(std::runtime_error( "geom has not facets" ));
     }
 
@@ -1024,16 +1016,16 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
     {
         std::int32_t     i, j;
 
-        if ( m_Vertex.size<int>() <= 0 )
+        if ( m_Vertex.size() <= 0 )
             throw(std::runtime_error( "geom has no vertices" ));
 
         // Allocat the remap table
-        xcore::unique_span<std::int32_t> VRemap;
+        std::vector<std::int32_t> VRemap;
 
-        if( auto Err = VRemap.Alloc( m_Vertex.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+        VRemap.resize( m_Vertex.size() );
 
         // Fill the remap table
-        for ( i = 0; i < m_Vertex.size<int>(); i++ )
+        for ( i = 0; i < m_Vertex.size(); i++ )
         {
             VRemap[ i ] = -1;
         }
@@ -1043,7 +1035,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         for ( std::int32_t j = 0; j < Face.m_nVertices; j++ )
         {
             if ( Face.m_iVertex[ j ] < 0 ||
-                Face.m_iVertex[ j ] >= m_Vertex.size<int>() )
+                Face.m_iVertex[ j ] >= m_Vertex.size() )
                 throw(std::runtime_error( std::format( "Found a facet that was indexing a vertex out of range! FaceID = {} VertexID = {}",
                 i, Face.m_iVertex[ j ] )));
 
@@ -1052,7 +1044,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
 
         // Create the remap table
         // and compact the vertices to the new location
-        for ( j = i = 0; i < m_Vertex.size<int>(); i++ )
+        for ( j = i = 0; i < m_Vertex.size(); i++ )
         {
             std::int32_t Value = VRemap[ i ];
 
@@ -1063,9 +1055,9 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         }
 
         // Set the final vertex count
-        TotalVerticesRemoved += m_Vertex.size<int>() - j;
+        TotalVerticesRemoved += static_cast<int>(m_Vertex.size() - j);
         if ( TotalVerticesRemoved )
-            if( auto Err = m_Vertex.resize( j ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+            m_Vertex.resize( j );
 
         // Remap all the faces to point to the new location of verts
         for ( facet& Face : m_Facet )
@@ -1088,40 +1080,40 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
             std::int32_t m_iNext;
         };
 
-        std::int32_t         i;
-        std::int32_t         nFacets;
-        xcore::unique_span<std::int32_t>   VNode;
-        xcore::unique_span<fref>  FRef;
-        std::int32_t         nRefs;
-        std::int32_t         iRef;
+        std::int32_t                i;
+        std::int32_t                nFacets;
+        std::vector<std::int32_t>   VNode;
+        std::vector<fref>           FRef;
+        std::int32_t                nRefs;
+        std::int32_t                iRef;
 
         // Make sure that we have vertices
-        if ( m_Vertex.size<int>() <= 0 )
+        if ( m_Vertex.size() <= 0 )
             throw(std::runtime_error( "geom has not vertices" ));
 
         // Get how many ref we should have
         nRefs = 0;
-        for ( i = 0; i < m_Facet.size<int>(); i++ )
+        for ( i = 0; i < m_Facet.size(); i++ )
         {
             nRefs += m_Facet[ i ].m_nVertices;
         }
 
         // Allocate hash, and refs
-        if( auto Err = VNode.New( m_Vertex.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-        if( auto Err = FRef.New( nRefs ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+        VNode.resize( m_Vertex.size() );
+        FRef.resize( nRefs );
 
         // Initalize the hash entries to null
-        for ( i = 0; i < m_Vertex.size<int>(); i++ )
+        for ( i = 0; i < m_Vertex.size(); i++ )
         {
             VNode[ i ] = -1;
         }
 
         // Insert all the face references into the hash
         iRef = 0;
-        for ( i = 0; i < m_Facet.size<int>(); i++ )
+        for ( i = 0; i < m_Facet.size(); i++ )
         for ( std::int32_t j = 0; j < m_Facet[ i ].m_nVertices; j++ )
         {
-            xassert( iRef < nRefs );
+            assert( iRef < nRefs );
             FRef[ iRef ].m_iFacet = i;
             FRef[ iRef ].m_iNext = VNode[ m_Facet[ i ].m_iVertex[ j ] ];
             VNode[ m_Facet[ i ].m_iVertex[ j ] ] = iRef;
@@ -1129,7 +1121,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         }
 
         // Find duplicate facets
-        for ( i = 0; i < m_Vertex.size<int>(); i++ )
+        for ( i = 0; i < m_Vertex.size(); i++ )
         for ( std::int32_t j = VNode[ i ]; j != -1; j = FRef[ j ].m_iNext )
         {
             facet& A = m_Facet[ FRef[ j ].m_iFacet ];
@@ -1157,7 +1149,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
 
         // Remove any unwanted facets
         nFacets = 0;
-        for ( i = 0; i < m_Facet.size<int>(); i++ )
+        for ( i = 0; i < m_Facet.size(); i++ )
         {
             if ( m_Facet[ i ].m_nVertices == 0 )
             {
@@ -1171,13 +1163,13 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         }
 
         // Set the new count
-        const std::int32_t nFacesRemoved = m_Facet.size<int>() - nFacets;
+        const std::int32_t nFacesRemoved = static_cast<int>(m_Facet.size() - nFacets);
         TotalFacetsRemoved += nFacesRemoved;
         if ( TotalFacetsRemoved )
-            if( auto Err = m_Facet.resize( nFacets ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+            m_Facet.resize( nFacets );
 
         // No facets left!
-        if ( m_Facet.size<int>() <= 0 )
+        if ( m_Facet.size() <= 0 )
             throw(std::runtime_error( "geom has not facets" ));
 
         if ( nFacesRemoved > 0 )
@@ -1190,7 +1182,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
     //
     // Remove materials that are not been use
     //
-    if( m_MaterialInstance.size<int>() > 0 )
+    if( m_MaterialInstance.size() > 0 )
     {
         struct mat
         {
@@ -1199,9 +1191,9 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         };
 
         std::int32_t         i;
-        xcore::unique_span<mat>   Used;
+        std::vector<mat>   Used;
         
-        if( auto Err = Used.New( m_MaterialInstance.size<int>( ) );Err ) throw(std::runtime_error(Err.getCode().m_pString));
+        Used.resize( m_MaterialInstance.size());
 
         for ( mat& Mat : Used )
         {
@@ -1210,12 +1202,12 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         }
         
         // Go throw the facets and mark all the used materials
-        for( i=0; i<m_Facet.size<int>(); i++ )
+        for( i=0; i<m_Facet.size(); i++ )
         {
             const facet& Facet = m_Facet[i];
              
             if( Facet.m_iMaterialInstance < 0 ||
-                Facet.m_iMaterialInstance > m_MaterialInstance.size<int>() )
+                Facet.m_iMaterialInstance > m_MaterialInstance.size() )
                 throw(std::runtime_error( std::format("Found a face from mesh [{}] which was using an unknow material FaceID={} MaterialID ={}", 
                     m_Mesh[ Facet.m_iMesh ].m_Name.c_str(),
                     i, Facet.m_iMaterialInstance )));
@@ -1226,7 +1218,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         // Collapse all the material in order
         std::int32_t     nMaterials      = 0;
         bool   bAnyCollapse    = false;
-        for( i=0; i<m_MaterialInstance.size<int>(); i++ )
+        for( i=0; i<m_MaterialInstance.size(); i++ )
         {
             if( Used[i].m_Used == false )
                 continue;
@@ -1248,7 +1240,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         // Update the material indices for the facets
         if ( bAnyCollapse )
         {
-            for( i=0; i<m_Facet.size<int>(); i++ )
+            for( i=0; i<m_Facet.size(); i++ )
             {
                 if( Used[ m_Facet[i].m_iMaterialInstance ].m_ReIndex < 0 ||
                     Used[ m_Facet[i].m_iMaterialInstance ].m_ReIndex >= nMaterials )
@@ -1258,8 +1250,8 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
             }
 
             // Set the new material count
-            TotalMaterialsRemoved += m_MaterialInstance.size<int>() - nMaterials;
-            if( auto Err = m_MaterialInstance.resize(nMaterials); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+            TotalMaterialsRemoved += static_cast<int>(m_MaterialInstance.size() - nMaterials);
+            m_MaterialInstance.resize(nMaterials);
         }
 
         // Sort material parameters
@@ -1276,18 +1268,18 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
     //
     {
         std::int32_t i;
-        xcore::unique_span<std::int32_t> SMesh;
+        std::vector<std::int32_t> SMesh;
         
-        if( auto Err = SMesh.New(m_Mesh.size<int>()); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-        std::memset( SMesh.data(), 0, SMesh.size_bytes() );
+        SMesh.resize(m_Mesh.size());
+        std::memset( SMesh.data(), 0, SMesh.size() * sizeof(SMesh[0]));
         
-        for( i=0; i<m_Facet.size<int>(); i++ )
+        for( i=0; i<m_Facet.size(); i++ )
         {
             SMesh[ m_Facet[i].m_iMesh ] = 1;
         }
 
         std::int32_t nSubs = 0;
-        for( i=0; i<m_Mesh.size<int>(); i++ )
+        for( i=0; i<m_Mesh.size(); i++ )
         {
             if( SMesh[ i ] == 1 )
             {
@@ -1301,12 +1293,12 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         }
 
         // Set the new count
-        if( m_Mesh.size<int>() != nSubs )
-            if( auto Err = m_Mesh.resize( nSubs ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+        if( m_Mesh.size() != nSubs )
+            m_Mesh.resize( nSubs );
         
-        for( i=0; i<m_Facet.size<int>(); i++ )
+        for( i=0; i<m_Facet.size(); i++ )
         {
-            xassert( SMesh[ m_Facet[i].m_iMesh ] >= 0 );
+            assert( SMesh[ m_Facet[i].m_iMesh ] >= 0 );
             m_Facet[i].m_iMesh = SMesh[ m_Facet[i].m_iMesh ];
         }
     }
@@ -1319,17 +1311,17 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
 
         struct mesh_info
         {
-            mesh    m_Mesh;
-            std::int32_t         m_iOriginal;
+            mesh            m_Mesh;
+            std::int32_t    m_iOriginal;
         };
 
-        xcore::unique_span<mesh_info> Mesh;
-        xcore::unique_span<std::int32_t>       Remap;
+        std::vector<mesh_info> Mesh;
+        std::vector<std::int32_t>       Remap;
         
-        if( auto Err = Mesh.New( m_Mesh.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-            if (auto Err = Remap.New( m_Mesh.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+        Mesh.resize( m_Mesh.size() );
+        Remap.resize( m_Mesh.size() );
         
-        for( i=0; i<m_Mesh.size<int>(); i++ )
+        for( i=0; i<m_Mesh.size(); i++ )
         {
             Mesh[i].m_Mesh       = m_Mesh[i];
             Mesh[i].m_iOriginal  = i;
@@ -1337,12 +1329,12 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
 
         // sort the meshes
         bool bSorted = false;
-        for ( j = 0; j < m_Mesh.size<int>() && !bSorted; j++ )
+        for ( j = 0; j < m_Mesh.size() && !bSorted; j++ )
         {
             bSorted = true;
-            for ( i = 0; i < m_Mesh.size<int>()-1-j; i++ )
+            for ( i = 0; i < m_Mesh.size()-1-j; i++ )
             {
-                if( xcore::string::Compare( Mesh[i].m_Mesh.m_Name, Mesh[i+1].m_Mesh.m_Name ) > 0 )
+                if( Mesh[i].m_Mesh.m_Name == Mesh[i+1].m_Mesh.m_Name )
                 {
                     bSorted        = false;
                     mesh_info Temp = Mesh[i+1];
@@ -1353,24 +1345,24 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         }
         
         // sanity check to make sure we know how to sort
-        for ( i = 0; i < m_Mesh.size<int>(); i++ )
+        for ( i = 0; i < m_Mesh.size(); i++ )
         {
-            if ( i < m_Mesh.size<int>()-1 )
+            if ( i < m_Mesh.size()-1 )
             {
-                xassert( xcore::string::Compare( Mesh[i].m_Mesh.m_Name, Mesh[i+1].m_Mesh.m_Name ) <= 0 );
+                assert( Mesh[i].m_Mesh.m_Name == Mesh[i+1].m_Mesh.m_Name );
             }
         }
 
         // copy over the original Meshes
-        for( i=0; i<m_Mesh.size<int>(); i++ )
+        for( i=0; i<m_Mesh.size(); i++ )
         {
             m_Mesh[i] = Mesh[i].m_Mesh;
         }
 
         // build a remap table for the faces
-        for( i=0; i<m_Mesh.size<int>(); i++ )
+        for( i=0; i<m_Mesh.size(); i++ )
         {
-            for ( j=0; j<m_Mesh.size<int>(); j++ )
+            for ( j=0; j<m_Mesh.size(); j++ )
             {
                 if ( Mesh[j].m_iOriginal == i )
                 {
@@ -1381,7 +1373,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         }
 
         // remap the faces
-        for( i=0; i<m_Facet.size<int>(); i++ )
+        for( i=0; i<m_Facet.size(); i++ )
         {
             m_Facet[i].m_iMesh = Remap[ m_Facet[i].m_iMesh ];
         }
@@ -1399,9 +1391,9 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
 /*
 void CalculateTangentArray( 
     const std::int32_t           vertexCount, 
-    const xcore::vector3*    vertex, 
-    const xcore::vector3*    normal,
-    const xcore::vector2*     texcoord, 
+    const xmath::fvec3*    vertex, 
+    const xmath::fvec3*    normal,
+    const xmath::fvec2*     texcoord, 
     const std::int32_t           triangleCount, 
     const std::int32_t[3]*       triangle, 
     Vector4D*           tangent )
@@ -1476,37 +1468,37 @@ void geom::SanityCheck( void ) const
     //
     // Check that we have a valid number of materials
     //
-    if( m_MaterialInstance.size<int>() < 0 )
+    if( m_MaterialInstance.size() < 0 )
         throw(std::runtime_error( "The geom it saying that it has a negative number of materials!"));
 
-    if( m_MaterialInstance.size<int>() > 1000 )
+    if( m_MaterialInstance.size() > 1000 )
         throw(std::runtime_error( "The rawgeom2 has more than 1000 materials right now that is a sign of a problem" ));
     
-    if( m_Vertex.size<int>() < 0 )
+    if( m_Vertex.size() < 0 )
         throw(std::runtime_error( "THe rawgeom2 has a negative number of vertices!" ));
 
-    if( m_Vertex.size<int>() > 100000000 )
+    if( m_Vertex.size() > 100000000 )
         throw(std::runtime_error( "The rawgeom2 seems to have more that 100 million vertices that is consider bad" ));
 
-    if( m_Facet.size<int>() < 0 )
+    if( m_Facet.size() < 0 )
         throw(std::runtime_error( "We have a negative number of facets" ));
 
-    if( m_Facet.size<int>() > 100000000 )
+    if( m_Facet.size() > 100000000 )
         throw(std::runtime_error( "THe rawgeom2 has more thatn 100 million facets that is consider worng" ));
 
-    if( m_Bone.size<int>() < 0 )
+    if( m_Bone.size() < 0 )
         throw (std::runtime_error("We have a negative count for bones" ));
     
-    if( m_Bone.size<int>() > 100000 )
+    if( m_Bone.size() > 100000 )
         throw (std::runtime_error("We have more than 100,000 bones this may be a problem" ));
 
-    if( m_MaterialInstance.size<int>() < 0 )
+    if( m_MaterialInstance.size() < 0 )
         throw(std::runtime_error( "Found a negative number of textures" ));
 
-    if( m_Mesh.size<int>() < 0 )
+    if( m_Mesh.size() < 0 )
         throw(std::runtime_error( "We have a negative number of meshes this is not good" ));
 
-    if( m_Mesh.size<int>() > 100000 )
+    if( m_Mesh.size() > 100000 )
         throw(std::runtime_error( "We have more than 100,000 meshes this may be a problem" ));
 
     //
@@ -1514,7 +1506,7 @@ void geom::SanityCheck( void ) const
     //
     {
         std::int32_t i;
-        for( i=0; i<m_Facet.size<int>(); i++ )
+        for( i=0; i<m_Facet.size(); i++ )
         {
             const facet& Facet = m_Facet[i];
 
@@ -1530,13 +1522,13 @@ void geom::SanityCheck( void ) const
             if( Facet.m_iMaterialInstance < 0 )
                 throw(std::runtime_error(std::format("I found a facet with a negative material. That is not allow. Facet#:{}",i)));
 
-            if( Facet.m_iMaterialInstance >= m_MaterialInstance.size<int>() )
+            if( Facet.m_iMaterialInstance >= m_MaterialInstance.size() )
                 throw(std::runtime_error(std::format("I found a facet that had an index to a material which is bad. Facet#:{}",i)));
 
             if( Facet.m_iMesh < 0 )
                 throw(std::runtime_error(std::format("I found a facet indexing to a negative offset for the meshID Facet#:{}",i)));
 
-            if( Facet.m_iMesh >= m_Mesh.size<int>() )
+            if( Facet.m_iMesh >= m_Mesh.size() )
                 throw(std::runtime_error(std::format("I found a facet indexing to a not exiting mesh Facet#:{}",i)));
 
             for( std::int32_t j=0; j<Facet.m_nVertices; j++ )
@@ -1544,7 +1536,7 @@ void geom::SanityCheck( void ) const
                 if( Facet.m_iVertex[j] < 0 )
                     throw(std::runtime_error(std::format("I found a facet with a negative index to vertices. Facet#:{}",i)));
 
-                if( Facet.m_iVertex[j] >= m_Vertex.size<int>() )
+                if( Facet.m_iVertex[j] >= m_Vertex.size() )
                     throw(std::runtime_error(std::format("I found a facet with a index to a non-exiting vertex. Facet#:{}",i)));
             }
         }
@@ -1555,16 +1547,16 @@ void geom::SanityCheck( void ) const
     //
     {
         std::int32_t i,j;
-        for( i=0; i<m_Facet.size<int>(); i++ )
+        for( i=0; i<m_Facet.size(); i++ )
         {
             const facet& Facet = m_Facet[i];
             for( j=0; j<Facet.m_nVertices; j++ )
             {
                 const vertex& V = m_Vertex[ Facet.m_iVertex[j] ];
 
-                if( xcore::math::isValid( V.m_Position.m_X ) == false ||
-                    xcore::math::isValid( V.m_Position.m_Y ) == false ||
-                    xcore::math::isValid( V.m_Position.m_Z ) == false )
+                if( xmath::isValid( V.m_Position.m_X ) == false ||
+                    xmath::isValid( V.m_Position.m_Y ) == false ||
+                    xmath::isValid( V.m_Position.m_Z ) == false )
                     throw(std::runtime_error(std::format("Just got a infinete vertex position: Vertex#:{}",j)));
 
                 if( V.m_nWeights < 0 )
@@ -1573,7 +1565,7 @@ void geom::SanityCheck( void ) const
                 if( V.m_nWeights >= vertex_max_weights_v )
                     throw(std::runtime_error(std::format("Found a vertex with way too many weights. V#:{}",j)));
 
-                if( V.m_nWeights > m_Bone.size<int>() )
+                if( V.m_nWeights > m_Bone.size() )
                     throw(std::runtime_error(std::format("Found a vertex pointing to a non-exiting bone: V#:{}",j)));
 
                 if( V.m_nNormals < 0 )
@@ -1611,7 +1603,7 @@ void geom::CleanWeights( std::int32_t MaxNumWeights, float MinWeightValue )
     //
     // Sort weights from largest to smallest
     //
-    for( i=0; i<m_Vertex.size<int>(); i++ )
+    for( i=0; i<m_Vertex.size(); i++ )
     {
         for( j=0; j<m_Vertex[i].m_nWeights; j++ )
         {
@@ -1626,15 +1618,15 @@ void geom::CleanWeights( std::int32_t MaxNumWeights, float MinWeightValue )
             m_Vertex[i].m_Weight[j] = m_Vertex[i].m_Weight[BestW];
             m_Vertex[i].m_Weight[BestW] = TW;
 
-            xassert(  m_Vertex[i].m_Weight[j].m_iBone >= 0 );
-            xassert( m_Vertex[i].m_Weight[j].m_iBone < m_Bone.size<int>() );
+            assert(  m_Vertex[i].m_Weight[j].m_iBone >= 0 );
+            assert( m_Vertex[i].m_Weight[j].m_iBone < m_Bone.size() );
         }
     }
 
     //
     // Cull any extra weights
     //
-    for( i=0; i<m_Vertex.size<int>(); i++ )
+    for( i=0; i<m_Vertex.size(); i++ )
         if( m_Vertex[i].m_nWeights > MaxNumWeights )
         {
             m_Vertex[i].m_nWeights = MaxNumWeights;
@@ -1651,7 +1643,7 @@ void geom::CleanWeights( std::int32_t MaxNumWeights, float MinWeightValue )
     //
     // Throw out all weights below MinWeightValue
     //
-    for( i=0; i<m_Vertex.size<int>(); i++ )
+    for( i=0; i<m_Vertex.size(); i++ )
     {
         if ( m_Vertex[i].m_nWeights == 0 )
         {
@@ -1686,15 +1678,15 @@ void geom::CleanWeights( std::int32_t MaxNumWeights, float MinWeightValue )
 
         for ( j = 0; j < m_Vertex[ i ].m_nWeights; j++ )
         {
-            xassert( m_Vertex[ i ].m_Weight[ j ].m_iBone >= 0 );
-            xassert( m_Vertex[ i ].m_Weight[ j ].m_iBone < m_Bone.size<int>() );
+            assert( m_Vertex[ i ].m_Weight[ j ].m_iBone >= 0 );
+            assert( m_Vertex[ i ].m_Weight[ j ].m_iBone < m_Bone.size() );
         }
     }
 }
 
 //--------------------------------------------------------------------------
 
-void geom::CollapseMeshes( const char* pMeshName )
+void geom::CollapseMeshes( std::string_view MeshName )
 {
     for( auto& Facet : m_Facet )
     {
@@ -1707,20 +1699,20 @@ void geom::CollapseMeshes( const char* pMeshName )
         MaxBones = std::max( MaxBones, Mesh.m_nBones );
     }
     
-    if( auto Err = m_Mesh.resize(1); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-    xcore::string::Copy( m_Mesh[0].m_Name, pMeshName );
-    m_Mesh[0].m_nBones = MaxBones;
+    m_Mesh.resize(1);
+    m_Mesh[0].m_Name    = MeshName;
+    m_Mesh[0].m_nBones  = MaxBones;
 }
 
 //--------------------------------------------------------------------------
 
-void geom::ComputeMeshBBox( std::int32_t iMesh, xcore::bbox& BBox )
+void geom::ComputeMeshBBox( std::int32_t iMesh, xmath::fbbox& BBox )
 {
     std::int32_t i,j;
 
     BBox.setZero();
 
-    for( i=0; i<m_Facet.size<int>(); i++ )
+    for( i=0; i<m_Facet.size(); i++ )
     {
         if( m_Facet[i].m_iMesh == iMesh )
         {
@@ -1742,11 +1734,11 @@ void geom::ComputeBoneInfo( void )
     //=====================================================================
 
     // Clear all bone bboxes
-    for (i = 0 ; i < m_Bone.size<int>() ; i++)
+    for (i = 0 ; i < m_Bone.size() ; i++)
         m_Bone[i].m_BBox.setZero() ;
 
     // Loop through all the verts and add to bone bboxes
-    for (i = 0 ; i < m_Vertex.size<int>() ; i++)
+    for (i = 0 ; i < m_Vertex.size() ; i++)
     {
         // Lookup vert
         vertex& Vertex = m_Vertex[i] ;
@@ -1756,8 +1748,8 @@ void geom::ComputeBoneInfo( void )
         {
             // Lookup bone that vert is attached to
             std::int32_t iBone = Vertex.m_Weight[j].m_iBone ;
-            xassert(iBone >= 0) ;
-            xassert(iBone < m_Bone.size<int>() ) ;
+            assert(iBone >= 0) ;
+            assert(iBone < m_Bone.size() ) ;
 
             // Add to bone bbox
             m_Bone[iBone].m_BBox += Vertex.m_Position ;
@@ -1765,7 +1757,7 @@ void geom::ComputeBoneInfo( void )
     }
 
     // If a bone has no geometry attached, then set bounds to the bone position
-    for (i = 0 ; i < m_Bone.size<int>() ; i++)
+    for (i = 0 ; i < m_Bone.size() ; i++)
     {
         // Lookup bone
         bone& Bone = m_Bone[i] ;
@@ -1775,7 +1767,7 @@ void geom::ComputeBoneInfo( void )
             Bone.m_BBox += Bone.m_Position ;
 
         // Inflate slightly do get rid of any degenerate (flat) sides
-        Bone.m_BBox.Inflate( xcore::vector3(0.1f, 0.1f, 0.1f) ) ;
+        Bone.m_BBox.Inflate( xmath::fvec3(0.1f, 0.1f, 0.1f) ) ;
     }
 
     //=====================================================================
@@ -1784,11 +1776,11 @@ void geom::ComputeBoneInfo( void )
     //=====================================================================
     
     // Clear values
-    for (i = 0 ; i < m_Mesh.size<int>(); i++)
+    for (i = 0 ; i < m_Mesh.size(); i++)
         m_Mesh[i].m_nBones = 0 ;
 
     // Loop through all faces
-    for (i = 0 ; i < m_Facet.size<int>() ; i++)
+    for (i = 0 ; i < m_Facet.size() ; i++)
     {
         // Lookup face and the mesh it's part of
         facet&      Face = m_Facet[i] ;
@@ -1810,7 +1802,7 @@ void geom::ComputeBoneInfo( void )
     }
 
     // We want the actual number of bones used so fix up
-    for (i = 0 ; i < m_Mesh.size<int>() ; i++)
+    for (i = 0 ; i < m_Mesh.size() ; i++)
         m_Mesh[i].m_nBones++ ;
 }
 
@@ -1824,7 +1816,7 @@ bool geom::IsolateMesh( std::int32_t iMesh, geom& NewMesh,
     if( iMesh < 0 )
         return false;
     
-    if(iMesh >= m_Mesh.size<int>() )
+    if(iMesh >= m_Mesh.size() )
         return false;
 
     //
@@ -1832,28 +1824,28 @@ bool geom::IsolateMesh( std::int32_t iMesh, geom& NewMesh,
     //
     //  BONES
     //
-    if( m_Bone.size<int>() > 0 )
+    if( m_Bone.size() > 0 )
     {
-        if( auto Err = NewMesh.m_Bone.New(m_Bone.size<int>()); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-        if( auto Err = NewMesh.m_Bone.copy( m_Bone ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+        NewMesh.m_Bone.resize(m_Bone.size());
+        NewMesh.m_Bone.assign( m_Bone.begin(), m_Bone.end());
     }
 
     //
     //  Meshes
     //
-    xassert( m_Mesh.size<int>() > 0 );
+    assert( m_Mesh.size() > 0 );
     
-    if (auto Err = NewMesh.m_Mesh.New(1); Err) throw(std::runtime_error(Err.getCode().m_pString));
+    NewMesh.m_Mesh.resize(1);
     NewMesh.m_Mesh[0] = m_Mesh[iMesh];
     
     
     //
     // Materials:
     //
-    if( m_MaterialInstance.size<int>() > 0 )
+    if( m_MaterialInstance.size() > 0 )
     {
-        if( auto Err = NewMesh.m_MaterialInstance.New( m_MaterialInstance.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-        if( auto Err = NewMesh.m_MaterialInstance.copy( m_MaterialInstance ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+        NewMesh.m_MaterialInstance.resize( m_MaterialInstance.size() );
+        NewMesh.m_MaterialInstance.assign( m_MaterialInstance.begin(), m_MaterialInstance.end());
     }
 
     // Verts and Facets:
@@ -1865,20 +1857,20 @@ bool geom::IsolateMesh( std::int32_t iMesh, geom& NewMesh,
     std::int32_t     i;
     std::int32_t     nFacets = 0;
 
-    for (i=0;i<m_Facet.size<int>();i++)
+    for (i=0;i<m_Facet.size();i++)
     {
         if (m_Facet[i].m_iMesh == iMesh)
             nFacets++;
     }
 
-    if( auto Err = NewMesh.m_Vertex.New( nFacets * 3 ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-    if( auto Err = NewMesh.m_Facet.New( nFacets ) ) throw(std::runtime_error(Err.getCode().m_pString));
+    NewMesh.m_Vertex.resize( nFacets * 3 );
+    NewMesh.m_Facet.resize( nFacets );
 
     geom::vertex*    pVert     = &NewMesh.m_Vertex[0];
     std::int32_t                 iVert     = 0;
     geom::facet*     pFacet    = &NewMesh.m_Facet[0];
     
-    for (i=0;i<m_Facet.size<int>();i++)
+    for (i=0;i<m_Facet.size();i++)
     {
         if (m_Facet[i].m_iMesh == iMesh)
         {
@@ -1916,16 +1908,16 @@ bool geom::IsolateMesh( std::int32_t iMesh, geom& NewMesh,
 
 //--------------------------------------------------------------------------
 
-bool geom::IsolateMesh( const char* pMeshName, geom& NewMesh )
+bool geom::IsolateMesh( std::string_view MeshName, geom& NewMesh )
 {
     std::int32_t  i;
 
-    if (pMeshName == NULL)
+    if (MeshName.empty())
         return false;
 
-    for( i=0;i<m_Mesh.size<int>();i++ )
+    for( i=0;i<m_Mesh.size();i++ )
     {
-        if( xcore::string::Compare( m_Mesh[i].m_Name, pMeshName ) == 0 )
+        if( m_Mesh[i].m_Name == MeshName )
         {
             return IsolateMesh( i, NewMesh );
         }
@@ -1940,7 +1932,7 @@ bool geom::isBoneUsed( std::int32_t iBone )
 {
     std::int32_t i,j;
 
-    for( i=0; i<m_Vertex.size<int>(); i++ )
+    for( i=0; i<m_Vertex.size(); i++ )
     {
         for( j=0; j<m_Vertex[i].m_nWeights; j++ )
         if( m_Vertex[i].m_Weight[j].m_iBone == iBone )
@@ -1952,35 +1944,35 @@ bool geom::isBoneUsed( std::int32_t iBone )
 
 //--------------------------------------------------------------------------
 
-void geom::CollapseNormals( xcore::radian ThresholdAngle )
+void geom::CollapseNormals( xmath::radian ThresholdAngle )
 {
-    float     TargetAngle = xcore::math::Cos( ThresholdAngle );
+    float     TargetAngle = xmath::Cos( ThresholdAngle );
 
     struct hash
     {
-        std::int32_t         m_iNext;
+        std::int32_t        m_iNext;
     };
 
     struct tempv
     {
-        xcore::vector3    m_NewNormal;
-        std::int32_t         m_Index;          // Inde to the original vertex
-        std::int32_t         m_iNext;          // next node in the has
+        xmath::fvec3        m_NewNormal;
+        std::int32_t        m_Index;          // Inde to the original vertex
+        std::int32_t        m_iNext;          // next node in the has
     };
 
-    if( m_Vertex.size<int>() <= 0 )
+    if( m_Vertex.size() <= 0 )
         throw(std::runtime_error( "geom has no vertices" ));
 
-    std::int32_t         i;
-    std::int32_t         HashSize  = std::max( 20, m_Vertex.size<int>()*10 );
-    float         MaxX, MinX, Shift;
+    std::int32_t    i;
+    std::int32_t    HashSize  = static_cast<int>(xmath::Max( 20u, m_Vertex.size()*10 ));
+    float           MaxX, MinX, Shift;
 
     // Allocate memory
-    xcore::unique_span<hash>       Hash;
-    xcore::unique_span<tempv>      TempV;
+    std::vector<hash>       Hash;
+    std::vector<tempv>      TempV;
     
-    if( auto Err = Hash.New( HashSize ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-    if( auto Err = TempV.New( m_Vertex.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+    Hash.resize( HashSize );
+    TempV.resize( m_Vertex.size() );
     
     // Initialize the hash with terminators
     for( i=0; i<HashSize; i++) 
@@ -1991,7 +1983,7 @@ void geom::CollapseNormals( xcore::radian ThresholdAngle )
     // Fill the nodes for each of the dimensions
     MaxX = m_Vertex[0].m_Position.m_X;
     MinX = MaxX;
-    for( i=0; i<m_Vertex.size<int>(); i++)
+    for( i=0; i<m_Vertex.size(); i++)
     {
         TempV[i].m_Index         =  i;
         TempV[i].m_iNext         = -1;
@@ -2003,12 +1995,12 @@ void geom::CollapseNormals( xcore::radian ThresholdAngle )
 
     // Hash all the vertices into the hash table
     Shift = HashSize/(MaxX-MinX+1);
-    for( i=0; i<m_Vertex.size<int>(); i++)
+    for( i=0; i<m_Vertex.size(); i++)
     {
         std::int32_t OffSet = (std::int32_t)(( m_Vertex[i].m_Position.m_X - MinX ) * Shift);
 
-        xassert(OffSet >= 0 );
-        xassert(OffSet < HashSize );
+        assert(OffSet >= 0 );
+        assert(OffSet < HashSize );
 
         TempV[i].m_iNext  = Hash[ OffSet ].m_iNext;
         Hash[ OffSet ].m_iNext = i;
@@ -2020,26 +2012,26 @@ void geom::CollapseNormals( xcore::radian ThresholdAngle )
         for( std::int32_t k = Hash[i].m_iNext; k != -1; k = TempV[k].m_iNext )
         {
             std::int32_t         j;
-            xcore::vector3    SrcN = m_Vertex[ TempV[k].m_Index ].m_BTN[0].m_Normal;
-            xcore::vector3    SrcP = m_Vertex[ TempV[k].m_Index ].m_Position;
-            xcore::vector3    ResultN = SrcN;
+            xmath::fvec3    SrcN = m_Vertex[ TempV[k].m_Index ].m_BTN[0].m_Normal;
+            xmath::fvec3    SrcP = m_Vertex[ TempV[k].m_Index ].m_Position;
+            xmath::fvec3    ResultN = SrcN;
             
             for( j = Hash[i].m_iNext; j != -1; j = TempV[j].m_iNext )
             {                
                 if (j==k)
                     continue;
                 
-                xcore::vector3 D = m_Vertex[ TempV[j].m_Index ].m_Position - SrcP;
+                xmath::fvec3 D = m_Vertex[ TempV[j].m_Index ].m_Position - SrcP;
 
                 //  If the verts don't share the same position, continue
-                if( D.getLength() > 0.001f )
+                if( D.Length() > 0.001f )
                     continue;
 
                 //
                 //  Check the normals to see if the 2nd vert's norm is within the
                 //  allowable threshold
                 //
-                xcore::vector3 N = m_Vertex[ TempV[j].m_Index ].m_BTN[0].m_Normal;
+                xmath::fvec3 N = m_Vertex[ TempV[j].m_Index ].m_BTN[0].m_Normal;
 
                 float      T = SrcN.Dot( N );
                 if ( T >= TargetAngle )
@@ -2054,17 +2046,17 @@ void geom::CollapseNormals( xcore::radian ThresholdAngle )
             {
                 for( j = Hash[i+1].m_iNext; j != -1; j = TempV[j].m_iNext )
                 {                
-                    xcore::vector3 D = m_Vertex[ TempV[j].m_Index ].m_Position - SrcP;
+                    xmath::fvec3 D = m_Vertex[ TempV[j].m_Index ].m_Position - SrcP;
 
                     //  If the verts don't share the same position, continue
-                    if (D.getLength() > 0.001f)
+                    if (D.Length() > 0.001f)
                         continue;
 
                     //
                     //  Check the normals to see if the 2nd vert's norm is within the
                     //  allowable threshold
                     //
-                    xcore::vector3 N = m_Vertex[ TempV[j].m_Index ].m_BTN[0].m_Normal;
+                    xmath::fvec3 N = m_Vertex[ TempV[j].m_Index ].m_BTN[0].m_Normal;
 
                     float     T = SrcN.Dot( N );
                     if ( T >= TargetAngle )
@@ -2082,7 +2074,7 @@ void geom::CollapseNormals( xcore::radian ThresholdAngle )
         }
     }
 
-    for (i=0;i<m_Vertex.size<int>();i++)
+    for (i=0;i<m_Vertex.size();i++)
     {
         m_Vertex[ TempV[i].m_Index ].m_BTN[0].m_Normal = TempV[i].m_NewNormal;
     }
@@ -2090,9 +2082,9 @@ void geom::CollapseNormals( xcore::radian ThresholdAngle )
 
 //--------------------------------------------------------------------------
 
-void geom::DeleteBone( const char* pBoneName )
+void geom::DeleteBone( std::string_view BoneName )
 {
-    std::int32_t iBone = getBoneIDFromName( pBoneName );
+    std::int32_t iBone = getBoneIDFromName( BoneName );
     if(iBone != -1)
         DeleteBone(iBone);
 }
@@ -2103,13 +2095,13 @@ void geom::DeleteBone( std::int32_t iBone )
 {
     //x_DebugMsg("MESH: Deleting bone: '%s'\n", m_pBone[iBone].Name);
     std::int32_t i,j;
-    xassert( m_Bone.size<int>() > 1 );
+    assert( m_Bone.size() > 1 );
 
     //
     // Allocate new bones and frames
     //
-    xcore::unique_span<bone> NewBone;
-    if( auto Err = NewBone.New( m_Bone.size<int>() - 1 ); Err) throw(std::runtime_error(Err.getCode().m_pString));
+    std::vector<bone> NewBone;
+    NewBone.resize( m_Bone.size() - 1 );
     
     //
     // Build new hierarchy
@@ -2117,7 +2109,7 @@ void geom::DeleteBone( std::int32_t iBone )
     {
         // Copy over remaining bones
         j=0;
-        for( i=0; i<m_Bone.size<int>(); i++ )
+        for( i=0; i<m_Bone.size(); i++ )
         if( i != iBone )
         {
             NewBone[j] = m_Bone[i];
@@ -2125,14 +2117,14 @@ void geom::DeleteBone( std::int32_t iBone )
         }
 
         // Patch children of bone
-        for( i=0; i<NewBone.size<int>(); i++ )
+        for( i=0; i<NewBone.size(); i++ )
         if( NewBone[i].m_iParent == iBone )
         {
             NewBone[i].m_iParent = m_Bone[iBone].m_iParent;
         }
 
         // Patch references to any bone > iBone
-        for( i=0; i<NewBone.size<int>(); i++ )
+        for( i=0; i<NewBone.size(); i++ )
         if( NewBone[i].m_iParent > iBone )
         {
             NewBone[i].m_iParent--;
@@ -2145,11 +2137,11 @@ void geom::DeleteBone( std::int32_t iBone )
 
 //--------------------------------------------------------------------------
 
-std::int32_t geom::getBoneIDFromName( const char* pBoneName ) const
+std::int32_t geom::getBoneIDFromName( std::string_view BoneName ) const
 {
     std::int32_t i;
-    for( i=0; i<m_Bone.size<int>(); i++ )
-    if( xcore::string::CompareI( pBoneName, m_Bone[i].m_Name) == 0 )
+    for( i=0; i<m_Bone.size(); i++ )
+    if( xstrtool::CompareI( BoneName, m_Bone[i].m_Name) == 0 )
         return i;
     return -1;
 }
@@ -2162,25 +2154,25 @@ void geom::ApplyNewSkeleton( const anim& Skel )
 
     // Transform all verts into local space of current skeleton
     if(/* DISABLES CODE */ (0))
-    for(i = 0; i < m_Vertex.size<int>(); i++)
+    for(i = 0; i < m_Vertex.size(); i++)
     {
         auto& Vertex = m_Vertex[i];
 
-        std::int32_t         iBone   = Vertex.m_Weight[0].m_iBone;
-        xcore::vector3    P       = Vertex.m_Position;
-        xcore::matrix4    BM;
+        std::int32_t    iBone   = Vertex.m_Weight[0].m_iBone;
+        xmath::fvec3    P       = Vertex.m_Position;
+        xmath::fmat4    BM;
         
-        BM.identity();
+        BM.setupIdentity();
         BM.Scale( m_Bone[iBone].m_Scale );
         BM.Rotate( m_Bone[iBone].m_Rotation );
         BM.Translate( m_Bone[iBone].m_Position );
-        BM.InvertSRT();
+        BM = BM.InverseSRT();
         
         Vertex.m_Position = BM * P;
     }
 
     // Remap bone indices
-    for(i = 0; i < m_Vertex.size<int>(); i++)
+    for(i = 0; i < m_Vertex.size(); i++)
     {
         geom::vertex* pVertex = &m_Vertex[i];
         for(std::int32_t iWeight = 0; iWeight < pVertex->m_nWeights; iWeight++)
@@ -2192,14 +2184,14 @@ void geom::ApplyNewSkeleton( const anim& Skel )
             std::int32_t curBoneId = oldBoneId;
             while( (newBoneId==-1) && (curBoneId!=-1) )
             {
-                const char* curBoneName = m_Bone[curBoneId].m_Name;
+                const auto& curBoneName = m_Bone[curBoneId].m_Name;
 
                 // Look for matching bone in Skel
-                for( j=0; j<Skel.m_Bone.size<int>(); j++ )
-                    if( xcore::string::CompareI( curBoneName, Skel.m_Bone[j].m_Name ) == 0 )
+                for( j=0; j<Skel.m_Bone.size(); j++ )
+                    if( xstrtool::CompareI( curBoneName, Skel.m_Bone[j].m_Name ) == 0 )
                         break;
 
-                if( j != Skel.m_Bone.size<int>() )
+                if( j != Skel.m_Bone.size() )
                 {
                     newBoneId = j;
                     break;
@@ -2215,8 +2207,8 @@ void geom::ApplyNewSkeleton( const anim& Skel )
                 printf( "WARNING: Unable to remap Bone Vertex[%d] to new bone", i );
             }
 
-            //xassert( m_pBone[pWeight->iBone].Position.Difference( Skel.GetBone(newBoneId).BindTranslation ) < 0.0001f );
-            //xassert( m_pBone[pWeight->iBone].Rotation.Difference( Skel.GetBone(newBoneId).BindRotation ) < 0.0001f );
+            //assert( m_pBone[pWeight->iBone].Position.Difference( Skel.GetBone(newBoneId).BindTranslation ) < 0.0001f );
+            //assert( m_pBone[pWeight->iBone].Rotation.Difference( Skel.GetBone(newBoneId).BindRotation ) < 0.0001f );
             //x_DebugMsg("For old bone of %d, found new bone %d\n", pWeight->iBone, newBoneId);
             pWeight->m_iBone = newBoneId;
             //x_DebugMsg("%s -> %s\n",m_pBone[oldBoneId].Name,Skel.m_pBone[newBoneId].Name);
@@ -2226,13 +2218,13 @@ void geom::ApplyNewSkeleton( const anim& Skel )
     //
     // Copy new bone information in
     //
-    if( auto Err = m_Bone.New( Skel.m_Bone.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-    for( std::int32_t count = 0; count < m_Bone.size<int>(); count++ )
+    m_Bone.resize( Skel.m_Bone.size() );
+    for( std::int32_t count = 0; count < m_Bone.size(); count++ )
     {
         m_Bone[count].m_iParent     =   Skel.m_Bone[count].m_iParent;
         m_Bone[count].m_nChildren   =   Skel.m_Bone[count].m_nChildren;
         
-        xcore::string::Copy( m_Bone[count].m_Name, Skel.m_Bone[count].m_Name );
+        m_Bone[count].m_Name        =   Skel.m_Bone[count].m_Name;
 
         m_Bone[count].m_Position    =   Skel.m_Bone[count].m_BindTranslation;
         m_Bone[count].m_Rotation    =   Skel.m_Bone[count].m_BindRotation;
@@ -2241,12 +2233,12 @@ void geom::ApplyNewSkeleton( const anim& Skel )
 
     // Transform all verts into model space of new skeleton
     if ( /* DISABLES CODE */ (0) )
-    for(i = 0; i < m_Vertex.size<int>(); i++)
+    for(i = 0; i < m_Vertex.size(); i++)
     {
-        std::int32_t         iBone   = m_Vertex[i].m_Weight[0].m_iBone;
-        xcore::vector3    P       = m_Vertex[i].m_Position;
-        xcore::matrix4    BM;
-        BM.identity();
+        std::int32_t    iBone   = m_Vertex[i].m_Weight[0].m_iBone;
+        xmath::fvec3    P       = m_Vertex[i].m_Position;
+        xmath::fmat4    BM;
+        BM.setupIdentity();
         BM.Scale        ( m_Bone[iBone].m_Scale );
         BM.Rotate       ( m_Bone[iBone].m_Rotation );
         BM.Translate    ( m_Bone[iBone].m_Position );
@@ -2264,38 +2256,38 @@ void geom::ApplyNewSkeleton( const geom& Skel )
     std::int32_t i;
 
     // Transform all verts into local space of current skeleton
-    for(i = 0; i < m_Vertex.size<int>(); i++)
+    for(i = 0; i < m_Vertex.size(); i++)
     {
         std::int32_t         iBone   = m_Vertex[i].m_Weight[0].m_iBone;
-        xcore::vector3    P       = m_Vertex[i].m_Position;
-        xcore::matrix4    BM;
+        xmath::fvec3    P       = m_Vertex[i].m_Position;
+        xmath::fmat4    BM;
         
-        BM.identity();
+        BM.setupIdentity();
         BM.Scale    ( m_Bone[iBone].m_Scale );
         BM.Rotate   ( m_Bone[iBone].m_Rotation );
         BM.Translate( m_Bone[iBone].m_Position );
-        BM.InvertSRT();
+        BM = BM.InverseSRT();
         m_Vertex[i].m_Position = BM * P;
     }
 
-    for( std::int32_t iVertex = 0; iVertex < m_Vertex.size<int>(); iVertex++ )
+    for( std::int32_t iVertex = 0; iVertex < m_Vertex.size(); iVertex++ )
     {
         vertex* pVertex = &m_Vertex[iVertex];
         for(std::int32_t iWeight = 0; iWeight < pVertex->m_nWeights; iWeight++)
         {
             weight*     pWeight     = &pVertex->m_Weight[iWeight];
             std::int32_t         oldBoneId   = pWeight->m_iBone;
-            const char* oldBoneName = m_Bone[oldBoneId].m_Name;
+            const auto&          oldBoneName = m_Bone[oldBoneId].m_Name;
             std::int32_t         newBoneId   = -1;
             std::int32_t         curBoneId   = oldBoneId;
-            const char* curBoneName = oldBoneName;
+            std::string_view     curBoneName = oldBoneName;
             
             while(newBoneId == -1)
             {
                 //x_DebugMsg("Looking in new skeleton for name '%s'\n", curBoneName);
                 newBoneId = Skel.getBoneIDFromName(curBoneName);
                 curBoneId = m_Bone[curBoneId].m_iParent;
-                xassert((newBoneId !=-1) || (curBoneId != -1));
+                assert((newBoneId !=-1) || (curBoneId != -1));
                 curBoneName = m_Bone[curBoneId].m_Name;
             }
             //x_DebugMsg("For old bone of %d, found new bone %d\n", pWeight->iBone, newBoneId);
@@ -2304,22 +2296,22 @@ void geom::ApplyNewSkeleton( const geom& Skel )
     }
 
     // Copy new bone information in
-    if( auto Err = m_Bone.New( Skel.m_Bone.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+    m_Bone.resize( Skel.m_Bone.size() );
 
-    for(std::int32_t count = 0; count < m_Bone.size<int>(); count++)
+    for(std::int32_t count = 0; count < m_Bone.size(); count++)
     {
         const bone& Bone = Skel.m_Bone[count];
         m_Bone[count] = Bone;
     }
 
     // Transform all verts into local space of current skeleton
-    for(i = 0; i < m_Vertex.size<int>(); i++)
+    for(i = 0; i < m_Vertex.size(); i++)
     {
         std::int32_t         iBone   = m_Vertex[i].m_Weight[0].m_iBone;
-        xcore::vector3    P       = m_Vertex[i].m_Position;
-        xcore::matrix4    BM;
+        xmath::fvec3    P       = m_Vertex[i].m_Position;
+        xmath::fmat4    BM;
         
-        BM.identity();
+        BM.setupIdentity();
         BM.Scale    ( m_Bone[iBone].m_Scale );
         BM.Rotate   ( m_Bone[iBone].m_Rotation );
         BM.Translate( m_Bone[iBone].m_Position );

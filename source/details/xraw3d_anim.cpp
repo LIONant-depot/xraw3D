@@ -33,19 +33,16 @@ bool anim::AreBonesFromSameBranch( std::int32_t iBoneA, std::int32_t iBoneB ) co
 
 anim& anim::operator =( const anim& Src )  
 { 
-    m_nFrames   = Src.m_nFrames;
-    m_FPS       = Src.m_FPS;
-    m_Name      = Src.m_Name;
+    m_nFrames       = Src.m_nFrames;
+    m_FPS           = Src.m_FPS;
+    m_Name          = Src.m_Name;
 
-    xcore::err Error;
-       ( Error = m_Bone.copy         ( Src.m_Bone )         )
-    || ( Error = m_KeyFrame.copy     ( Src.m_KeyFrame)      )
-    || ( Error = m_Event.copy        ( Src.m_Event )        )
-    || ( Error = m_SuperEvent.copy   ( Src.m_SuperEvent )   )
-    || ( Error = m_Prop.copy         ( Src.m_Prop )         )
-    || ( Error = m_PropFrame.copy    ( Src.m_PropFrame )    )
-    ;
-    if( Error ) throw(std::runtime_error(Error.getCode().m_pString));
+    m_Bone          = Src.m_Bone;
+    m_KeyFrame      = Src.m_KeyFrame;
+    m_Event         = Src.m_Event;
+    m_SuperEvent    = Src.m_SuperEvent;
+    m_Prop          = Src.m_Prop;
+    m_PropFrame     = Src.m_PropFrame;
 
     return *this;
 }
@@ -66,9 +63,8 @@ struct temp_bone : public anim::bone
 void anim::PutBonesInLODOrder( void )
 {
     // Create temp bones
-    xcore::unique_span<temp_bone> TempBone;
-    if( TempBone.New( m_Bone.size() ) )
-        throw("Out of memory while new temp bones");
+    std::vector<temp_bone> TempBone;
+    TempBone.resize(m_Bone.size());
 
     //
     // Initialize structures
@@ -85,22 +81,22 @@ void anim::PutBonesInLODOrder( void )
         //
         // Set the LOD group of the bone
         //
-        auto iLodGroupStart = xcore::string::FindStr( Bone.m_Name, "LOD[" );
-        if ( iLodGroupStart != -1 )
+        auto iLodGroupStart = Bone.m_Name.find( "LOD[" );
+        if ( iLodGroupStart != std::string::npos )
         {
-            auto iLodGroupEnd = xcore::string::FindStr( &Bone.m_Name[iLodGroupStart+1], "]" );
-            if ( iLodGroupEnd == -1 )
+            auto iLodGroupEnd = Bone.m_Name.find("]", iLodGroupStart+1 );
+            if ( iLodGroupEnd == std::string::npos)
                 throw( std::runtime_error( std::format( "ERROR: We found a bone[{}] with an LOD group but with a missing ']' ", Bone.m_Name.c_str() )));
 
             std::array<char,32> Buffer;
             std::int32_t  Length = std::int32_t(iLodGroupEnd - iLodGroupStart);
-            xassert( Length < sizeof(Buffer) );
+            assert( Length < sizeof(Buffer) );
 
             strncpy_s( Buffer.data(), Buffer.size(), &Bone.m_Name[ iLodGroupStart + 4 ], Length );
 
             TBone.m_LODGroup = std::atoi( Buffer.data() );
-            xassert( TBone.m_LODGroup >= 0 );
-            xassert( TBone.m_LODGroup <= 1000 );
+            assert( TBone.m_LODGroup >= 0 );
+            assert( TBone.m_LODGroup <= 1000 );
         }
         else
         {
@@ -116,7 +112,7 @@ void anim::PutBonesInLODOrder( void )
         TBone.m_Depth = 0;
         for( std::int32_t i = TBone.m_iParent; i != -1; i = m_Bone[i].m_iParent )
         {
-            xassert( TBone.m_iParent != -1 );
+            assert( TBone.m_iParent != -1 );
 
             // Cascade the LOD group down if the user did not specify any new groups
             if ( TBone.m_LODGroup == -1 && TempBone[ TBone.m_iParent ].m_LODGroup >= 0 )
@@ -170,7 +166,7 @@ void anim::PutBonesInLODOrder( void )
     // Copy out the temp bones into the real bones
     for( std::int32_t i = 0 ; i < TempBone.size(); i++ )
     {
-        m_Bone[i] = TempBone[i];
+        m_Bone[i] = std::move(TempBone[i]);
     }
 
     // Validate
@@ -184,26 +180,26 @@ void anim::PutBonesInLODOrder( void )
     }
 
     // Remap all the keys
-    xcore::unique_span<key_frame> NewKeys;
-    if( NewKeys.New( m_KeyFrame.size() ) )
-        throw( std::runtime_error("out of memory while new key"));
-    const std::int32_t nBones = m_Bone.size<std::int32_t>();
-    for ( std::int32_t iKey = 0; iKey < m_KeyFrame.size(); iKey++ )
+    std::vector<key_frame> NewKeys;
+    NewKeys.resize(m_KeyFrame.size());
+
+    const auto nBones = m_Bone.size();
+    for ( auto iKey = 0u; iKey < m_KeyFrame.size(); iKey++ )
     {
-        const std::int32_t iFrame    = iKey / nBones;
-        const std::int32_t iBone     = iKey % m_Bone.size();
-        const std::int32_t iOld      = (iFrame * nBones) + TempBone[ iBone ].m_iBone; 
+        const auto iFrame    = iKey / nBones;
+        const auto iBone     = iKey % m_Bone.size();
+        const auto iOld      = (iFrame * nBones) + TempBone[ iBone ].m_iBone;
         
         NewKeys[ iKey ] = m_KeyFrame[ iOld ];
     }
 
     // set the new list
-    if( auto Err = m_KeyFrame.copy( NewKeys ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+    m_KeyFrame = std::move(NewKeys);
 
     // Show hierarchy in debug window
     /*
     x_DebugMsg("\n\n\nLOD optimized bone order:\n") ;
-    for( std::int32_t i = 0 ; i < m_Bone.size<int>() ; i++)
+    for( std::int32_t i = 0 ; i < m_Bone.size() ; i++)
     {
         std::int32_t iParent ;
 
@@ -231,37 +227,34 @@ void anim::PutBonesInLODOrder( void )
 
 void anim::Serialize
 ( bool                          isRead
-, const char*                   pFileName
-, xcore::textfile::file_type    FileType
+, std::wstring_view             FileName
+, xtextfile::file_type          FileType
 )
 {
-    xcore::textfile::stream File;
-    xcore::err              Error;
+    xtextfile::stream File;
 
-    if( auto Err = File.Open(isRead, pFileName, FileType ); Err )
-        throw(std::runtime_error( Err.getCode().m_pString ));
+    if( auto Err = File.Open(isRead, FileName, FileType ); Err )
+        throw(std::runtime_error( std::string(Err.getMessage()) ));
 
-    if( File.Record
-        ( Error
-        , "AnimInfo"
-        , [&]( std::size_t, xcore::err& Err )
+    if( auto Err = File.Record
+        ( "AnimInfo"
+        , [&]( std::size_t, xerr& Err )
         {
                (Err = File.Field( "Name",    m_Name ))
             || (Err = File.Field( "FPS",     m_FPS ))
             || (Err = File.Field( "nFrames", m_nFrames ))
             ;
         })
-      ) throw(std::runtime_error(Error.getCode().m_pString));;
+      ; Err ) throw(std::runtime_error(std::string(Err.getMessage())));
 
-    if( File.Record
-        ( Error
-        , "Skeleton"
-        , [&]( std::size_t& C, xcore::err& Err )
+    if( auto Err = File.Record
+        ( "Skeleton"
+        , [&]( std::size_t& C, xerr& Err )
         {
-            if(isRead) Err = m_Bone.New( C );
-            else       C = m_Bone.size();
+            if(isRead) m_Bone.resize(C);
+            else       C   = m_Bone.size();
         }
-        , [&](std::size_t I, xcore::err& Err )
+        , [&](std::size_t I, xerr& Err )
         {
             int Index = int(I);
             if( Err = File.Field( "Index",        Index ) ) return;
@@ -278,40 +271,39 @@ void anim::Serialize
             || (Err = File.Field( "bPosKeys",     Bone.m_bTranslationKeys)                                                                                      )
             ;
         })
-      ) throw(std::runtime_error(Error.getCode().m_pString));
+      ; Err ) throw(std::runtime_error( std::string(Err.getMessage())));
 
 
-    if( File.Record
-        (Error
-        , "KeyFrames"
-        , [&](std::size_t& C, xcore::err& Err)
+    if( auto Err = File.Record
+        ( "KeyFrames"
+        , [&](std::size_t& C, xerr& Err)
         {
-            if (isRead) Err = m_KeyFrame.New(C);
+            if (isRead) m_KeyFrame.resize(C);
             else        C   = m_KeyFrame.size();
         }
-        , [&](std::size_t I, xcore::err& Err)
+        , [&](std::size_t I, xerr& Err)
         {
             int Index = int(I);
             if (Err = File.Field("iKey", Index)) return;
 
-            int iBone  = Index % m_Bone.size<int>();
+            int iBone  = static_cast<int>(Index % m_Bone.size());
             if (Err = File.Field("iBone", iBone)) return;
 
-            int iFrame = Index / m_Bone.size<int>();
+            int iFrame = static_cast<int>(Index / m_Bone.size());
             if (Err = File.Field("iFrame", iFrame)) return;
 
             auto& Frame = m_KeyFrame[Index];
                (Err = File.Field("Scale",     Frame.m_Scale.m_X,       Frame.m_Scale.m_Y,       Frame.m_Scale.m_Z )                          )
-            || (Err = File.Field("Rotate",    Frame.m_Rotate.m_X,      Frame.m_Rotate.m_Y,      Frame.m_Rotate.m_Z,       Frame.m_Rotate.m_W ) )
-            || (Err = File.Field("Translate", Frame.m_Translate.m_X,   Frame.m_Translate.m_Y,   Frame.m_Translate.m_Z )                      )
+            || (Err = File.Field("Rotate",    Frame.m_Rotation.m_X,    Frame.m_Rotation.m_Y,    Frame.m_Rotation.m_Z,       Frame.m_Rotation.m_W ) )
+            || (Err = File.Field("Translate", Frame.m_Position.m_X,    Frame.m_Position.m_Y,    Frame.m_Position.m_Z )                      )
             ;
         })
-      ) throw(std::runtime_error(Error.getCode().m_pString));
+      ; Err ) throw(std::runtime_error(std::string(Err.getMessage())));
 }
 
 //--------------------------------------------------------------------------
 
-void anim::ComputeBonesL2W( xcore::matrix4* pMatrix, float Frame ) const
+void anim::ComputeBonesL2W( std::span<xmath::fmat4> Matrix, float Frame ) const
 {
     std::int32_t i;
 
@@ -324,39 +316,39 @@ void anim::ComputeBonesL2W( xcore::matrix4* pMatrix, float Frame ) const
     float fFrame  = Frame - iFrame0;
 
     // Loop through bones and build matrices
-    const key_frame* pF0 = &m_KeyFrame[ iFrame0*m_Bone.size<int>() ];
-    const key_frame* pF1 = &m_KeyFrame[ iFrame1*m_Bone.size<int>() ];
-    for( i=0; i<m_Bone.size<int>(); i++ )
+    const key_frame* pF0 = &m_KeyFrame[ iFrame0*m_Bone.size() ];
+    const key_frame* pF1 = &m_KeyFrame[ iFrame1*m_Bone.size() ];
+    for( i=0; i<m_Bone.size(); i++ )
     {
-        xcore::quaternion R = pF0->m_Rotate.BlendAccurate( fFrame, pF1->m_Rotate );
-        xcore::vector3    S = pF0->m_Scale     + fFrame*(pF1->m_Scale       - pF0->m_Scale);
-        xcore::vector3    T = pF0->m_Translate + fFrame*(pF1->m_Translate - pF0->m_Translate);
+        xmath::fquat R = pF0->m_Rotation.Lerp(pF1->m_Rotation,  fFrame );
+        xmath::fvec3 S = pF0->m_Scale.Lerp(pF1->m_Scale, fFrame );
+        xmath::fvec3 T = pF0->m_Position.Lerp(pF1->m_Position, fFrame);
         pF0++;
         pF1++;
-        pMatrix[i].setup( S, R, T );
+        Matrix[i].setupSRT( S, R, T );
 
         // Concatenate with parent
         if( m_Bone[i].m_iParent != -1 )
         {
-            xassert( m_Bone[i].m_iParent < i );
-            pMatrix[i] = pMatrix[ m_Bone[i].m_iParent ] * pMatrix[i];
+            assert( m_Bone[i].m_iParent < i );
+            Matrix[i] = Matrix[ m_Bone[i].m_iParent ] * Matrix[i];
         }
     }
 
     // Apply bind matrices
     for( i=0; i<m_Bone.size(); i++ )
     {
-        pMatrix[i] = pMatrix[i] * m_Bone[i].m_BindMatrixInv;
+        Matrix[i] = Matrix[i] * m_Bone[i].m_BindMatrixInv;
     }
 }
 
 //--------------------------------------------------------------------------
 
-void anim::ComputeBonesL2W( xcore::matrix4* pMatrix
-                          , std::int32_t    iFrame
-                          , bool            bRemoveHorizMotion
-                          , bool            bRemoveVertMotion
-                          , bool            bRemoveYawMotion ) const
+void anim::ComputeBonesL2W( std::span<xmath::fmat4> Matrix
+                          , std::int32_t            iFrame
+                          , bool                    bRemoveHorizMotion
+                          , bool                    bRemoveVertMotion
+                          , bool                    bRemoveYawMotion ) const
 {
     std::int32_t i;
 
@@ -364,16 +356,16 @@ void anim::ComputeBonesL2W( xcore::matrix4* pMatrix
     iFrame = iFrame % (m_nFrames-1) ;
 
     // Loop through bones and build matrices
-    const key_frame* pF0 = &m_KeyFrame[ iFrame * m_Bone.size<int>() ];
-    for( i=0; i<m_Bone.size<int>(); i++ )
+    const key_frame* pF0 = &m_KeyFrame[ iFrame * m_Bone.size() ];
+    for( i=0; i<m_Bone.size(); i++ )
     {
         // Root bone mayhem?
         if (i == 0)
         {
             // Lookup info
-            xcore::vector3     Scale = pF0->m_Scale ;
-            xcore::vector3     Trans = pF0->m_Translate ;
-            xcore::quaternion  Rot   = pF0->m_Rotate ;
+            xmath::fvec3    Scale = pF0->m_Scale ;
+            xmath::fvec3    Trans = pF0->m_Position;
+            xmath::fquat    Rot   = pF0->m_Rotation;
 
             // Remove horiz motion?
             if( bRemoveHorizMotion )
@@ -390,12 +382,12 @@ void anim::ComputeBonesL2W( xcore::matrix4* pMatrix
             }
 
             // Setup matrix from frame
-            pMatrix[i].setup( Scale, Rot, Trans );
+            Matrix[i].setupSRT( Scale, Rot, Trans);
         }
         else
         {
             // Setup matrix from frame
-            pMatrix[i].setup( pF0->m_Scale, pF0->m_Rotate, pF0->m_Translate );
+            Matrix[i].setupSRT( pF0->m_Scale, pF0->m_Rotation, pF0->m_Position);
         }
 
         // Next frame
@@ -403,19 +395,19 @@ void anim::ComputeBonesL2W( xcore::matrix4* pMatrix
 
         // Concatenate with parent
         if( m_Bone[i].m_iParent != -1 )
-            pMatrix[i] = pMatrix[ m_Bone[i].m_iParent ] * pMatrix[i];
+            Matrix[i] = Matrix[ m_Bone[i].m_iParent ] * Matrix[i];
     }
 
     // Apply bind matrices
-    for( i=0; i<m_Bone.size<int>(); i++ )
+    for( i=0; i<m_Bone.size(); i++ )
     {
-        pMatrix[i] = pMatrix[i] * m_Bone[i].m_BindMatrixInv;
+        Matrix[i] = Matrix[i] * m_Bone[i].m_BindMatrixInv;
     }
 }
 
 //--------------------------------------------------------------------------
 
-void anim::ComputeBoneL2W( std::int32_t iBone, xcore::matrix4& Matrix, float Frame ) const
+void anim::ComputeBoneL2W( std::int32_t iBone, xmath::fmat4& Matrix, float Frame ) const
 {
     // Keep frame in range
     Frame = std::fmodf( Frame, float( m_nFrames - 1) );
@@ -426,22 +418,22 @@ void anim::ComputeBoneL2W( std::int32_t iBone, xcore::matrix4& Matrix, float Fra
     float fFrame  = Frame - iFrame0;
 
     // Loop through bones and build matrices
-    const key_frame* pF0 = &m_KeyFrame[ iFrame0 * m_Bone.size<int>() ];
-    const key_frame* pF1 = &m_KeyFrame[ iFrame1 * m_Bone.size<int>() ];
+    const key_frame* pF0 = &m_KeyFrame[ iFrame0 * m_Bone.size() ];
+    const key_frame* pF1 = &m_KeyFrame[ iFrame1 * m_Bone.size() ];
 
     // Clear bone matrix
-    Matrix.identity();
+    Matrix.setupIdentity();
 
     // Run hierarchy from bone to root node
     std::int32_t I = iBone;
     while( I != -1 )
     {
-        xcore::quaternion R = pF0[I].m_Rotate.BlendAccurate( fFrame, pF1[I].m_Rotate );
-        xcore::vector3    S = pF0[I].m_Scale       + fFrame*(pF1[I].m_Scale       - pF0[I].m_Scale);
-        xcore::vector3    T = pF0[I].m_Translate + fFrame*(pF1[I].m_Translate - pF0[I].m_Translate);
+        xmath::fquat R = pF0[I].m_Rotation.Lerp(pF1[I].m_Rotation, fFrame);
+        xmath::fvec3 S = pF0[I].m_Scale.Lerp(pF1[I].m_Scale, fFrame);
+        xmath::fvec3 T = pF0[I].m_Position.Lerp(pF1[I].m_Position, fFrame);
 
-        xcore::matrix4 LM;
-        LM.setup( S, R, T );
+        xmath::fmat4 LM;
+        LM.setupSRT(S, R, T);
 
         Matrix = LM * Matrix;
         I = m_Bone[I].m_iParent;
@@ -453,27 +445,27 @@ void anim::ComputeBoneL2W( std::int32_t iBone, xcore::matrix4& Matrix, float Fra
 
 //--------------------------------------------------------------------------
 
-void anim::ComputeRawBoneL2W( std::int32_t iBone, xcore::matrix4& Matrix, std::int32_t iFrame ) const
+void anim::ComputeRawBoneL2W( std::int32_t iBone, xmath::fmat4& Matrix, std::int32_t iFrame ) const
 {
     // Keep frame in range
-    xassert( (iFrame>=0) && (iFrame<m_nFrames) );
+    assert( (iFrame>=0) && (iFrame<m_nFrames) );
 
     // Loop through bones and build matrices
-    const key_frame* pF = &m_KeyFrame[ iFrame * m_Bone.size<int>() ];
+    const key_frame* pF = &m_KeyFrame[ iFrame * m_Bone.size() ];
 
     // Clear bone matrix
-    Matrix.identity();
+    Matrix.setupIdentity();
 
     // Run hierarchy from bone to root node
     std::int32_t I = iBone;
     while( I != -1 )
     {
-        xcore::quaternion R = pF[I].m_Rotate;
-        xcore::vector3    S = pF[I].m_Scale;
-        xcore::vector3    T = pF[I].m_Translate;
+        xmath::fquat R = pF[I].m_Rotation;
+        xmath::fvec3 S = pF[I].m_Scale;
+        xmath::fvec3 T = pF[I].m_Position;
 
-        xcore::matrix4 LM;
-        LM.setup( S, R, T );
+        xmath::fmat4 LM;
+        LM.setupSRT(S, R, T);
 
         Matrix = LM * Matrix;
         I = m_Bone[I].m_iParent;
@@ -485,7 +477,7 @@ void anim::ComputeRawBoneL2W( std::int32_t iBone, xcore::matrix4& Matrix, std::i
 
 //--------------------------------------------------------------------------
 
-void anim::ComputeBoneKeys( xcore::quaternion* pQ, xcore::vector3* pS, xcore::vector3* pT, float Frame ) const
+void anim::ComputeBoneKeys( std::span<xmath::fquat> Q, std::span<xmath::fvec3> S, std::span<xmath::fvec3> T, float Frame ) const
 {
     std::int32_t i;
 
@@ -498,13 +490,13 @@ void anim::ComputeBoneKeys( xcore::quaternion* pQ, xcore::vector3* pS, xcore::ve
     float fFrame  = Frame - iFrame0;
 
     // Loop through bones and build matrices
-    const key_frame* pF0 = &m_KeyFrame[ iFrame0 * m_Bone.size<int>() ];
-    const key_frame* pF1 = &m_KeyFrame[ iFrame1 * m_Bone.size<int>() ];
-    for( i=0; i<m_Bone.size<int>(); i++ )
+    const key_frame* pF0 = &m_KeyFrame[ iFrame0 * m_Bone.size() ];
+    const key_frame* pF1 = &m_KeyFrame[ iFrame1 * m_Bone.size() ];
+    for( i=0; i<m_Bone.size(); i++ )
     {
-        pQ[i] = pF0->m_Rotate.BlendAccurate( fFrame, pF1->m_Rotate );
-        pS[i] = pF0->m_Scale       + fFrame*(pF1->m_Scale       - pF0->m_Scale);
-        pT[i] = pF0->m_Translate + fFrame*(pF1->m_Translate - pF0->m_Translate);
+        Q[i] = pF0->m_Rotation.Lerp(pF1->m_Rotation, fFrame);
+        S[i] = pF0->m_Scale.Lerp(pF1->m_Scale, fFrame);
+        T[i] = pF0->m_Position.Lerp(pF1->m_Position, fFrame);
         pF0++;
         pF1++;
     }
@@ -512,11 +504,11 @@ void anim::ComputeBoneKeys( xcore::quaternion* pQ, xcore::vector3* pS, xcore::ve
 
 //--------------------------------------------------------------------------
 
-std::int32_t anim::GetBoneIDFromName( const char* pBoneName ) const
+std::int32_t anim::GetBoneIDFromName( std::string_view BoneName ) const
 {
     std::int32_t i;
-    for( i=0; i<m_Bone.size<int>(); i++ )
-    if( xcore::string::CompareI( pBoneName, m_Bone[i].m_Name ) == 0 )
+    for( i=0; i<m_Bone.size(); i++ )
+    if( xstrtool::CompareI( BoneName, m_Bone[i].m_Name ) == 0 )
         return i;
     return -1;
 }
@@ -525,23 +517,24 @@ std::int32_t anim::GetBoneIDFromName( const char* pBoneName ) const
 
 void anim::RemoveFramesFromRage( std::int32_t StartingValidRange, std::int32_t EndingValidRange )
 {
-    xassert( StartingValidRange >= 0 );
-    xassert( EndingValidRange >= 0 );
-    xassert( EndingValidRange <= m_nFrames );
-    xassert( StartingValidRange <= m_nFrames );
+    assert( StartingValidRange >= 0 );
+    assert( EndingValidRange >= 0 );
+    assert( EndingValidRange <= m_nFrames );
+    assert( StartingValidRange <= m_nFrames );
 
     if( StartingValidRange == 0 && EndingValidRange == m_nFrames )
         return;
 
-    xcore::unique_span<key_frame> NewRange;
+    std::vector<key_frame> NewRange;
 
     const std::int32_t nFrames = EndingValidRange - StartingValidRange;
 
-    if( auto Err = NewRange.New( nFrames * m_Bone.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+    NewRange.resize(nFrames * m_Bone.size());
+
     for( std::int32_t i = StartingValidRange; i <EndingValidRange; i++ )
     {
         const std::int32_t iNewSpace = i - StartingValidRange;
-        std::memcpy( &NewRange[ iNewSpace * m_Bone.size<int>() ], &m_KeyFrame[ i * m_Bone.size<int>()], sizeof(key_frame) * m_Bone.size<int>() );
+        std::memcpy( &NewRange[ iNewSpace * m_Bone.size() ], &m_KeyFrame[ i * m_Bone.size()], sizeof(key_frame) * m_Bone.size() );
     }     
 
     // Set the new key frames
@@ -558,8 +551,8 @@ void anim::BakeBindingIntoFrames( bool DoScale, bool DoRotation, bool DoTranslat
     //
     // Loop through frames of animation
     //
-    xcore::unique_span<xcore::matrix4> L2W;
-    if( auto Err = L2W.New( m_Bone.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+    std::vector<xmath::fmat4> L2W;
+    L2W.resize(m_Bone.size());
 
     for( i=0; i<m_nFrames; i++ )
     {
@@ -567,11 +560,11 @@ void anim::BakeBindingIntoFrames( bool DoScale, bool DoRotation, bool DoTranslat
         // Compute matrices for current animation.
         // No binding is applied
         //
-        for( j=0; j<m_Bone.size<int>(); j++ )
+        for( j=0; j<m_Bone.size(); j++ )
         {
-            key_frame* pF = &m_KeyFrame[ i*m_Bone.size<int>() + j ];
+            key_frame* pF = &m_KeyFrame[ i*m_Bone.size() + j ];
 
-            L2W[j].setup( pF->m_Scale, pF->m_Rotate, pF->m_Translate );
+            L2W[j].setupSRT( pF->m_Scale, pF->m_Rotation, pF->m_Position );
 
             // Concatenate with parent
             if( m_Bone[j].m_iParent != -1 )
@@ -583,7 +576,7 @@ void anim::BakeBindingIntoFrames( bool DoScale, bool DoRotation, bool DoTranslat
         //
         // Apply original bind matrices
         //
-        for( j=0; j<m_Bone.size<int>(); j++ )
+        for( j=0; j<m_Bone.size(); j++ )
         {
             L2W[j] = L2W[j] * m_Bone[j].m_BindMatrixInv;
         }
@@ -591,57 +584,56 @@ void anim::BakeBindingIntoFrames( bool DoScale, bool DoRotation, bool DoTranslat
         //
         // Remove bind translation and scale matrices
         //
-        for( j=0; j<m_Bone.size<int>(); j++ )
+        for( j=0; j<m_Bone.size(); j++ )
         {
-            xcore::quaternion R = m_Bone[j].m_BindRotation;
-            xcore::vector3    S = m_Bone[j].m_BindScale;
-            xcore::vector3    T = m_Bone[j].m_BindTranslation;
+            xmath::fquat R = m_Bone[j].m_BindRotation;
+            xmath::fvec3 S = m_Bone[j].m_BindScale;
+            xmath::fvec3 T = m_Bone[j].m_BindTranslation;
 
-            if( DoScale )       S.setup(1,1,1);
-            if( DoRotation )    R.identity();
-            if( DoTranslation ) T.setup(0,0,0);
+            if( DoScale )       S.setup(1);
+            if( DoRotation )    R.setupIdentity();
+            if( DoTranslation ) T.setup(0);
 
-            xcore::matrix4 BindMatrix;
-            BindMatrix.setup( S, R, T );
+            xmath::fmat4 BindMatrix;
+            BindMatrix.setupSRT( S, R, T);
             L2W[j] = L2W[j] * BindMatrix;
         }
 
         // Convert back to local space transform
-        for( j = m_Bone.size<int>()-1; j>0; j-- )
+        for( j = static_cast<int>(m_Bone.size()-1); j>0; j-- )
             if( m_Bone[j].m_iParent != -1 )
             {
-                xcore::matrix4 PM = L2W[ m_Bone[j].m_iParent ];
-                PM.InvertSRT();
+                auto PM = L2W[ m_Bone[j].m_iParent ];
+                PM.InverseSRT();
                 L2W[j] = PM * L2W[j];
             }
 
         // Pull out rotation scale and translation
-        for( j=0; j<m_Bone.size<int>(); j++ )
+        for( j=0; j<m_Bone.size(); j++ )
         {
-            key_frame* pF       = &m_KeyFrame[i * m_Bone.size<int>() + j ];
+            key_frame* pF       = &m_KeyFrame[i * m_Bone.size() + j ];
             
-            pF->m_Scale         = L2W[j].getScale();
-            pF->m_Rotate.setup( L2W[j] );
-            pF->m_Translate   = L2W[j].getTranslation();
-            
+            pF->m_Scale         = L2W[j].ExtractScale();
+            pF->m_Rotation      = L2W[j];
+            pF->m_Position      = L2W[j].ExtractPosition();
         }
     }
 
     // Remove wanted attributes out of the binding
-    for( i=0; i<m_Bone.size<int>(); i++ )
+    for( i=0; i<m_Bone.size(); i++ )
     {
         if ( DoTranslation )
             m_Bone[ i ].m_BindTranslation.setup(0);
 
         if( DoScale ) 
-            m_Bone[i].m_BindScale.setup(1,1,1);
+            m_Bone[i].m_BindScale.setup(1);
 
         if( DoRotation )
-            m_Bone[i].m_BindRotation.identity();
+            m_Bone[i].m_BindRotation.setupIdentity();
 
-        m_Bone[i].m_BindMatrix.setup( m_Bone[i].m_BindScale, m_Bone[i].m_BindRotation, m_Bone[i].m_BindTranslation );
+        m_Bone[i].m_BindMatrix.setupSRT( m_Bone[i].m_BindScale, m_Bone[i].m_BindRotation, m_Bone[i].m_BindTranslation);
         m_Bone[i].m_BindMatrixInv = m_Bone[i].m_BindMatrix;
-        m_Bone[i].m_BindMatrixInv.InvertSRT();
+        m_Bone[i].m_BindMatrixInv.InverseSRT();
     }
 }
 
@@ -650,11 +642,9 @@ void anim::BakeBindingIntoFrames( bool DoScale, bool DoRotation, bool DoTranslat
 void anim::DeleteDummyBones( void )
 {
     std::int32_t iBone = 0;
-    while( iBone < m_Bone.size<int>() )
+    while( iBone < m_Bone.size() )
     {
-        string S( m_Bone[iBone].m_Name );
-
-        if( xcore::string::FindStr( S, "dummy") != -1)
+        if(m_Bone[iBone].m_Name.find( "dummy") != std::string::npos)
         {
             //Check if it is the root.  If it is, make sure it is not the only root; that is,
             // we can only delete a root bone if it only has one child (because then its child
@@ -662,7 +652,7 @@ void anim::DeleteDummyBones( void )
             if(m_Bone[iBone].m_iParent == -1)
             {
                 std::int32_t nChildren = 0;
-                for(std::int32_t count = 0; count < m_Bone.size<int>(); count++)
+                for(std::size_t count = 0; count < m_Bone.size(); count++)
                 {
                     if( m_Bone[count].m_iParent == iBone )
                         nChildren++;
@@ -702,9 +692,9 @@ void anim::DeleteDummyBones( void )
     
 //--------------------------------------------------------------------------
 
-void anim::DeleteBone( const char* pBoneName )
+void anim::DeleteBone( std::string_view BoneName )
 {
-    std::int32_t iBone = this->GetBoneIDFromName(pBoneName);
+    std::int32_t iBone = this->GetBoneIDFromName(BoneName);
     if(iBone != -1)
         DeleteBone(iBone);
     return;
@@ -716,23 +706,25 @@ void anim::DeleteBone( std::int32_t iBone )
 {
     //x_DebugMsg("Deleting bone: '%s'\n", m_pBone[iBone].Name);
     std::int32_t i,j;
-    //xassertS( m_Bone.size<int>() > 1, TempDebugFileName );
+    //xassertS( m_Bone.size() > 1, TempDebugFileName );
+
+    if (m_Bone.empty()) return;
 
     //
     // Allocate new bones and frames
     //
-    std::int32_t                 nNewBones = m_Bone.size<int>()-1;
-    xcore::unique_span<bone>          NewBone;
-    xcore::unique_span<key_frame>     NewFrame;
-    
-    if( auto Err = NewBone.New( nNewBones );              Err ) throw(std::runtime_error(Err.getCode().m_pString));
-    if (auto Err = NewFrame.New( nNewBones * m_nFrames ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+    std::int32_t               nNewBones = static_cast<std::int32_t>(m_Bone.size()-1);
+    std::vector<bone>          NewBone;
+    std::vector<key_frame>     NewFrame;
+
+    NewBone.resize(nNewBones);
+    NewFrame.resize(nNewBones * m_nFrames);
     
     //
     // Check and see if bone has any children
     //
     bool HasChildren = false;
-    for( i=0; i<m_Bone.size<int>(); i++ )
+    for( i=0; i<m_Bone.size(); i++ )
         if( m_Bone[i].m_iParent == iBone )
             HasChildren = true;
 
@@ -742,7 +734,7 @@ void anim::DeleteBone( std::int32_t iBone )
     {
         // Copy over remaining bones
         j=0;
-        for( i=0; i<m_Bone.size<int>(); i++ )
+        for( i=0; i<m_Bone.size(); i++ )
             if( i != iBone )
             {
                 NewBone[j] = m_Bone[i];
@@ -775,10 +767,10 @@ void anim::DeleteBone( std::int32_t iBone )
         //
         std::int32_t k=0;
         for( i=0; i<m_nFrames; i++ )
-        for( j=0; j<m_Bone.size<int>(); j++ )
+        for( j=0; j<m_Bone.size(); j++ )
         {
             if( j!=iBone )
-                NewFrame[k++] = m_KeyFrame[ i*m_Bone.size<int>() + j ];
+                NewFrame[k++] = m_KeyFrame[ i*m_Bone.size() + j ];
         }
     }
     else
@@ -786,17 +778,17 @@ void anim::DeleteBone( std::int32_t iBone )
         //
         // Loop through frames of animation
         //
-        xcore::unique_span<xcore::matrix4> L2W;
-        if( auto Err = L2W.Alloc( m_Bone.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+        std::vector<xmath::fmat4> L2W;
+        L2W.resize(m_Bone.size());
 
         for( i=0; i<m_nFrames; i++ )
         {
             // Compute matrices for current animation.
-            for( j=0; j<m_Bone.size<int>(); j++ )
+            for( j=0; j<m_Bone.size(); j++ )
             {
-                const key_frame* pF = &m_KeyFrame[ i*m_Bone.size<int>()+j ];
+                const key_frame* pF = &m_KeyFrame[ i*m_Bone.size()+j ];
 
-                L2W[j].setup( pF->m_Scale, pF->m_Rotate, pF->m_Translate );
+                L2W[j].setupSRT( pF->m_Scale, pF->m_Rotation, pF->m_Position);
 
                 // Concatenate with parent
                 if( m_Bone[j].m_iParent != -1 )
@@ -806,16 +798,16 @@ void anim::DeleteBone( std::int32_t iBone )
             }
 
             // Apply original bind matrices
-            //for( j=0; j<m_Bone.size<int>(); j++ )
+            //for( j=0; j<m_Bone.size(); j++ )
             //{
             //    L2W[j] = L2W[j] * m_Bone[j].m_BindMatrixInv;
             //}
 
             // Shift bones down to align with NewBones
-            if( iBone != (m_Bone.size<int>()-1) ) 
-                std::memmove( &L2W[iBone], &L2W[ iBone+1 ], sizeof(xcore::matrix4)*(m_Bone.size<int>()-iBone-1) );
+            if( iBone != (m_Bone.size()-1) ) 
+                std::memmove( &L2W[iBone], &L2W[ iBone+1 ], sizeof(xmath::fmat4)*(m_Bone.size()-iBone-1) );
 
-            //for( j=iBone+1; j<m_Bone.size<int>(); j++ )
+            //for( j=iBone+1; j<m_Bone.size(); j++ )
             //    L2W[j-1] = L2W[j];
 
 
@@ -829,8 +821,8 @@ void anim::DeleteBone( std::int32_t iBone )
             for( j=nNewBones-1; j>0; j-- )
                 if( NewBone[j].m_iParent != -1 )
                 {
-                    xcore::matrix4 PM = L2W[ NewBone[j].m_iParent ];
-                    PM.InvertSRT();
+                    xmath::fmat4 PM = L2W[ NewBone[j].m_iParent ];
+                    PM.InverseSRT();
                     L2W[j] = PM * L2W[j];
                 }
 
@@ -839,9 +831,9 @@ void anim::DeleteBone( std::int32_t iBone )
             {
                 key_frame* pF       = &NewFrame[i*nNewBones + j];
                 
-                pF->m_Scale = L2W[j].getScale();
-                pF->m_Rotate.setup( L2W[j] );
-                pF->m_Translate = L2W[j].getTranslation();
+                pF->m_Scale     = L2W[j].ExtractScale();
+                pF->m_Rotation  = L2W[j];
+                pF->m_Position  = L2W[j].ExtractPosition();
             }
         }
     }
@@ -865,7 +857,7 @@ bool anim::ApplyNewSkeleton( const anim& BindAnim )
     // Handle setting the new root
     //
     {
-        xassert( -1 == BindAnim.m_Bone[0].m_iParent );
+        assert( -1 == BindAnim.m_Bone[0].m_iParent );
         std::int32_t iRoot = GetBoneIDFromName( BindAnim.m_Bone[0].m_Name );
         if( iRoot == -1 )
             throw(std::runtime_error("ERROR: Failt to apply the new skeleton because I was not able to find the rootbone in the old skeleton"));
@@ -879,15 +871,15 @@ bool anim::ApplyNewSkeleton( const anim& BindAnim )
     // Remove all bones not in BindAnim
     //
     i = 0;
-    while( i < m_Bone.size<int>() )
+    while( i < m_Bone.size() )
     {
-        for( j=0; j<BindAnim.m_Bone.size<int>(); j++ )
-        if( xcore::string::CompareI( m_Bone[i].m_Name, BindAnim.m_Bone[j].m_Name ) == 0 )
+        for( j=0; j<BindAnim.m_Bone.size(); j++ )
+        if( xstrtool::CompareI( m_Bone[i].m_Name, BindAnim.m_Bone[j].m_Name ) == 0 )
             break;
 
-        if( j == BindAnim.m_Bone.size<int>() )
+        if( j == BindAnim.m_Bone.size() )
         {
-            if( m_Bone.size<int>() == 1 )
+            if( m_Bone.size() == 1 )
             {
                 throw(std::runtime_error( "ERROR: has no bones in bind." ));
             }
@@ -903,29 +895,29 @@ bool anim::ApplyNewSkeleton( const anim& BindAnim )
     //
     // Allocate new bones and frames
     //
-    xcore::unique_span<bone>        NewBone;
-    xcore::unique_span<key_frame>   NewFrame;
+    std::vector<bone>        NewBone;
+    std::vector<key_frame>   NewFrame;
 
-    if( auto Err = NewBone.New( BindAnim.m_Bone.size<int>() );              Err ) throw(std::runtime_error(Err.getCode().m_pString));
-    if( auto Err = NewFrame.New( BindAnim.m_Bone.size<int>() * m_nFrames ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-    
+    NewBone.resize(BindAnim.m_Bone.size());
+    NewFrame.resize(BindAnim.m_Bone.size() * m_nFrames);
+
     //
     // Copy over bind skeleton
     //
-    std::memcpy( NewBone.data(), BindAnim.m_Bone.data(), sizeof(bone)*BindAnim.m_Bone.size<int>() );
+    std::memcpy( NewBone.data(), BindAnim.m_Bone.data(), sizeof(bone)*BindAnim.m_Bone.size() );
 
     //
     // Construct frames
     //
-    for( i=0; i<BindAnim.m_Bone.size<int>(); i++ )
+    for( i=0; i<BindAnim.m_Bone.size(); i++ )
     {
         // Lookup bone in current anim
-        for( j=0; j<m_Bone.size<int>(); j++ )
-            if( xcore::string::CompareI( m_Bone[j].m_Name, NewBone[i].m_Name ) == 0 )
+        for( j=0; j<m_Bone.size(); j++ )
+            if( xstrtool::CompareI( m_Bone[j].m_Name, NewBone[i].m_Name ) == 0 )
                 break;
 
         // Check if bone is present
-        if( j == m_Bone.size<int>() )
+        if( j == m_Bone.size() )
         {
             Problem = true;
 
@@ -933,12 +925,12 @@ bool anim::ApplyNewSkeleton( const anim& BindAnim )
             // Copy over first frame of BindAnim
 
             key_frame Key;
-            Key.m_Rotate = BindAnim.m_Bone[i].m_BindRotation;
-            Key.m_Scale    = BindAnim.m_Bone[ i ].m_BindScale;
-            Key.m_Translate.setup(0);
+            Key.m_Rotation  = BindAnim.m_Bone[i].m_BindRotation;
+            Key.m_Scale     = BindAnim.m_Bone[ i ].m_BindScale;
+            Key.m_Position.setup(0);
 
             for( k=0; k<m_nFrames; k++ )
-                NewFrame[k*BindAnim.m_Bone.size<int>() + i] = Key; //.identity();// = BindAnim.m_KeyFrame[i];
+                NewFrame[k*BindAnim.m_Bone.size() + i] = Key; //.identity();// = BindAnim.m_KeyFrame[i];
         }
         else
         {
@@ -947,7 +939,7 @@ bool anim::ApplyNewSkeleton( const anim& BindAnim )
 
             // Copy data into new bone slot
             for( k=0; k<m_nFrames; k++ )
-                NewFrame[k*BindAnim.m_Bone.size<int>() + i] = m_KeyFrame[k*m_Bone.size<int>()+j];
+                NewFrame[k*BindAnim.m_Bone.size() + i] = m_KeyFrame[k*m_Bone.size()+j];
         }
     }
 
@@ -969,15 +961,15 @@ bool anim::HasSameSkeleton( const anim& Anim ) const
 {
     std::int32_t i;
 
-    if( m_Bone.size<int>() != Anim.m_Bone.size<int>() )
+    if( m_Bone.size() != Anim.m_Bone.size() )
         return false;
 
-    for( i=0; i<m_Bone.size<int>(); i++ )
+    for( i=0; i<m_Bone.size(); i++ )
     {
         const bone& B0 = m_Bone[i];
         const bone& B1 = Anim.m_Bone[i];
 
-        if( xcore::string::CompareI( B0.m_Name, B1.m_Name ) != 0 )
+        if( xstrtool::CompareI( B0.m_Name, B1.m_Name ) != 0 )
             return false;
 
         if( B0.m_iParent != B1.m_iParent )
@@ -1001,15 +993,15 @@ bool anim::HasSameSkeleton( const anim& Anim ) const
 
 void anim::SanityCheck( void ) const
 {
-    xassert( (m_Bone.size<int>()>0) && (m_Bone.size<int>()<2048) );
-    xassert( (m_nFrames>=0) && (m_nFrames<65536) );
+    assert( (m_Bone.size()>0) && (m_Bone.size()<2048) );
+    assert( (m_nFrames>=0) && (m_nFrames<65536) );
 }
 
 //--------------------------------------------------------------------------
 
 bool anim::isMaskedAnim( void ) const
 {
-    for( std::int32_t i=0; i<m_Bone.size<int>(); i++ )
+    for( std::int32_t i=0; i<m_Bone.size(); i++ )
         if( m_Bone[i].m_bIsMasked )
             return true;
 
@@ -1032,13 +1024,13 @@ void anim::setNewRoot( std::int32_t Index )
     //
     // Allocate new bones and frames
     //
-    const std::int32_t           nParentsBones   = Index;
-    const std::int32_t           nNewBones       = m_Bone.size<int>() - nParentsBones;
-    xcore::unique_span<bone>          NewBone;
-    xcore::unique_span<key_frame>     NewFrame;
+    const std::int32_t          nParentsBones   = Index;
+    const std::int32_t          nNewBones       = static_cast<std::int32_t>(m_Bone.size() - nParentsBones);
+    std::vector<bone>           NewBone;
+    std::vector<key_frame>      NewFrame;
 
-    if( auto Err = NewBone.New( nNewBones ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-    if( auto Err = NewFrame.New( nNewBones * m_nFrames ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+    NewBone.resize(nNewBones);
+    NewBone.resize(nNewBones * m_nFrames);
 
     //
     // Build new hierarchy
@@ -1058,24 +1050,24 @@ void anim::setNewRoot( std::int32_t Index )
         for ( std::int32_t i = 1; i<nNewBones; i++ )
         {
             NewBone[ i ].m_iParent -= nParentsBones;
-            xassert( NewBone[ i ].m_iParent >=0 );
+            assert( NewBone[ i ].m_iParent >=0 );
         }
     }
 
     //
     // Loop through frames of animation
     //
-    xcore::unique_span<xcore::matrix4> L2W;
-    if( auto Err = L2W.Alloc( m_Bone.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+    std::vector<xmath::fmat4> L2W;
+    L2W.resize(m_Bone.size());
 
     for ( std::int32_t iFrame = 0; iFrame < m_nFrames; iFrame++ )
     {
         // Compute matrices for current animation.
-        for ( std::int32_t j = 0; j < m_Bone.size<int>(); j++ )
+        for ( std::int32_t j = 0; j < m_Bone.size(); j++ )
         {
-            const key_frame& F = m_KeyFrame[ iFrame*m_Bone.size<int>() + j ];
+            const key_frame& F = m_KeyFrame[ iFrame*m_Bone.size() + j ];
 
-            L2W[ j ].setup( F.m_Scale, F.m_Rotate, F.m_Translate );
+            L2W[ j ].setupSRT(F.m_Scale, F.m_Rotation, F.m_Position);
 
             // Concatenate with parent
             if ( m_Bone[ j ].m_iParent != -1 )
@@ -1085,14 +1077,14 @@ void anim::setNewRoot( std::int32_t Index )
         }
 
         // Shift bones down to align with NewBones
-        std::memmove( &L2W[0], &L2W[ Index ], sizeof(xcore::matrix4)*nNewBones );
+        std::memmove( &L2W[0], &L2W[ Index ], sizeof( xmath::fmat4)*nNewBones );
 
         // Convert back to local space transform
         for ( std::int32_t j = nNewBones - 1; j>0; j-- )
         {
-            xassert( NewBone[ j ].m_iParent != -1 );
-            xcore::matrix4 PM = L2W[ NewBone[ j ].m_iParent ];
-            PM.InvertSRT();
+            assert( NewBone[ j ].m_iParent != -1 );
+            xmath::fmat4 PM = L2W[ NewBone[ j ].m_iParent ];
+            PM.InverseSRT();
             L2W[ j ] = PM * L2W[ j ];
         }
 
@@ -1101,10 +1093,9 @@ void anim::setNewRoot( std::int32_t Index )
         {
             key_frame& Frame = NewFrame[ iFrame*nNewBones + j ];
 
-            Frame.m_Scale = L2W[ j ].getScale();
-            Frame.m_Rotate.setup( L2W[ j ] );
-            Frame.m_Translate = L2W[ j ].getTranslation();
-
+            Frame.m_Scale       = L2W[ j ].ExtractScale();
+            Frame.m_Rotation    = L2W[ j ];
+            Frame.m_Position    = L2W[ j ].ExtractPosition();
         }
     }
 
@@ -1116,50 +1107,50 @@ void anim::setNewRoot( std::int32_t Index )
 
 //--------------------------------------------------------------------------
 
-void anim::CopyFrames( xcore::unique_span<key_frame>& KeyFrame, std::int32_t iStart, std::int32_t nFrames ) const
+void anim::CopyFrames( std::vector<key_frame>& KeyFrame, std::int32_t iStart, std::int32_t nFrames ) const
 {
-    xassert( iStart >= 0 );
-    xassert( nFrames > 0 );
-    xassert( iStart + nFrames <= m_nFrames );
+    assert( iStart >= 0 );
+    assert( nFrames > 0 );
+    assert( iStart + nFrames <= m_nFrames );
 
-    const std::int32_t nBones = m_Bone.size<int>();
-    if( auto Err = KeyFrame.Alloc( nBones * nFrames ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+    const std::int32_t nBones = static_cast<std::int32_t>(m_Bone.size());
+    KeyFrame.resize(nBones * nFrames);
     std::memcpy( &KeyFrame[0], &m_KeyFrame[ iStart * nBones ], sizeof(key_frame)*nBones*nFrames );
 }
 
 //--------------------------------------------------------------------------
 
-void anim::InsertFrames( std::int32_t iDestFrame, xcore::unique_span<key_frame>& KeyFrame )
+void anim::InsertFrames( std::int32_t iDestFrame, std::span<key_frame> KeyFrame )
 {
-    xassert( iDestFrame >= 0 );
-    if( KeyFrame.size<int>() == 0 )
+    assert( iDestFrame >= 0 );
+    if( KeyFrame.size() == 0 )
         return;
 
-    xassert( KeyFrame.size<int>() > 0 );
-    xassert( iDestFrame <= m_nFrames );
+    assert( KeyFrame.size() > 0 );
+    assert( iDestFrame <= m_nFrames );
 
-    const std::int32_t nBones        = m_Bone.size<int>();
+    const std::int32_t nBones        = static_cast<std::int32_t>(m_Bone.size());
     const std::int32_t oldnFrames    = m_nFrames;
 
     // Update the number of frames in the anim
-    m_nFrames += KeyFrame.size<int>()/nBones;
+    m_nFrames += static_cast<std::int32_t>(KeyFrame.size()/nBones);
 
-    if( m_KeyFrame.size<int>() == 0 )
+    if( m_KeyFrame.size() == 0 )
     {
-        if( auto Err = m_KeyFrame.copy( KeyFrame );  Err ) throw(std::runtime_error(Err.getCode().m_pString));
+        m_KeyFrame.assign( KeyFrame.begin(), KeyFrame.end() );
         return;
     }
 
-    if( auto Err = m_KeyFrame.resize( m_KeyFrame.size<int>() + KeyFrame.size<int>() ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
+    m_KeyFrame.resize(m_KeyFrame.size() + KeyFrame.size());
     
     if( iDestFrame != oldnFrames )
     {
-        std::memmove( &m_KeyFrame[ iDestFrame * nBones + KeyFrame.size<int>() ], 
+        std::memmove( &m_KeyFrame[ iDestFrame * nBones + KeyFrame.size() ], 
                    &m_KeyFrame[ iDestFrame * nBones ], 
-                   sizeof(key_frame)*KeyFrame.size<int>() );
+                   sizeof(key_frame)*KeyFrame.size() );
     }
 
-    std::memcpy( &m_KeyFrame[ iDestFrame * nBones ], &KeyFrame[0], sizeof(key_frame)*KeyFrame.size<int>() );
+    std::memcpy( &m_KeyFrame[ iDestFrame * nBones ], &KeyFrame[0], sizeof(key_frame)*KeyFrame.size() );
 }
 
 //--------------------------------------------------------------------------
@@ -1168,11 +1159,10 @@ void anim::RencenterAnim( bool TX, bool TY, bool TZ, bool Pitch, bool Yaw, bool 
 {
     if( TX | TY | TZ )
     {
-        const std::int32_t       nBones          =   m_Bone.size<int>();
-        const xcore::vector3  LinearVelocity  =   m_KeyFrame[ nBones * 1 ].m_Translate -
-                                            m_KeyFrame[ nBones * 0 ].m_Translate;
-        const xcore::vector3  CurrentCenter   =   m_KeyFrame[ nBones * 0 ].m_Translate;
-         xcore::vector3       NewCenterDelta(0);
+        const std::int32_t       nBones          =   static_cast<std::int32_t>(m_Bone.size());
+        const xmath::fvec3       LinearVelocity  =   m_KeyFrame[ nBones * 1 ].m_Position - m_KeyFrame[ nBones * 0 ].m_Position;
+        const xmath::fvec3       CurrentCenter   =   m_KeyFrame[ nBones * 0 ].m_Position;
+        xmath::fvec3             NewCenterDelta(0);
 
         if( TX )
             NewCenterDelta.m_X = LinearVelocity.m_X - CurrentCenter.m_X;
@@ -1186,7 +1176,7 @@ void anim::RencenterAnim( bool TX, bool TY, bool TZ, bool Pitch, bool Yaw, bool 
         for( std::int32_t i=0; i<m_nFrames; i++ )
         {
             auto& Frame = m_KeyFrame[ nBones * i ]; 
-            Frame.m_Translate += NewCenterDelta; 
+            Frame.m_Position += NewCenterDelta; 
         }
     }
 
@@ -1195,20 +1185,20 @@ void anim::RencenterAnim( bool TX, bool TY, bool TZ, bool Pitch, bool Yaw, bool 
     //
     if( Pitch | Yaw | Roll )
     {
-        const std::int32_t nBones          = m_Bone.size<int>();
-        auto      InvRotation     = xcore::quaternion( m_KeyFrame[ 0 ].m_Rotate ).Invert().getRotation();
+        const std::int32_t  nBones          = static_cast<std::int32_t>(m_Bone.size());
+        xmath::radian3      InvRotation     = xmath::fquat( m_KeyFrame[ 0 ].m_Rotation ).Inverse().ToEuler();
 
         if( !Pitch ) InvRotation.m_Pitch = 0_xdeg;
         if( !Yaw )   InvRotation.m_Yaw   = 0_xdeg;
         if( !Roll )  InvRotation.m_Roll  = 0_xdeg;
 
-        const xcore::quaternion InvRotFiltered( InvRotation );
+        const xmath::fquat InvRotFiltered( InvRotation );
 
         for( std::int32_t i=0; i<m_nFrames; i++ )
         {
             auto& Frame = m_KeyFrame[ nBones * i ]; 
-            Frame.m_Rotate    = InvRotFiltered * Frame.m_Rotate;
-            Frame.m_Translate = InvRotFiltered * Frame.m_Translate;
+            Frame.m_Rotation = InvRotFiltered * Frame.m_Rotation;
+            Frame.m_Position = InvRotFiltered * Frame.m_Position;
         }
     }
 }
@@ -1218,44 +1208,44 @@ void anim::RencenterAnim( bool TX, bool TY, bool TZ, bool Pitch, bool Yaw, bool 
 void anim::CleanLoopingAnim( void )
 {
     const std::int32_t                      nFrames         = m_nFrames;
-    const std::int32_t                      nBones          = m_Bone.size<int>();
+    const std::int32_t                      nBones          = static_cast<std::int32_t>(m_Bone.size());
     const std::int32_t                      nAffectedFrames = m_FPS / 19;
-    xcore::unique_span<xcore::transform3>   ContinuesFrames;
-    xcore::unique_span<xcore::transform3>   NewFrames;
+    std::vector<xmath::transform3>          ContinuesFrames;
+    std::vector<xmath::transform3>          NewFrames;
 
     //
     // Create the array of the new frames and fill it with information
     //
-    if( auto Err = NewFrames.New( nAffectedFrames * 2 * nBones );       Err ) throw(std::runtime_error(Err.getCode().m_pString));
-    if( auto Err = ContinuesFrames.New( nAffectedFrames * 2 * nBones ); Err ) throw(std::runtime_error(Err.getCode().m_pString));
-     
+    NewFrames.resize(nAffectedFrames * 2 * nBones);
+    ContinuesFrames.resize(nAffectedFrames * 2 * nBones);
+
     //
     // Create the frames in the same loop space
     //
     {
         const auto&             RootLastFrame   = m_KeyFrame[ (nFrames-1) * nBones ];
         //const auto&           RootFirstFrame  = m_KeyFrame[ 0 ];
-        const auto              DeltaYaw        = RootLastFrame.m_Rotate.getRotation().m_Yaw;
-        const xcore::quaternion DeltaRot        = xcore::quaternion( xcore::radian3(0_xdeg,DeltaYaw,0_xdeg) );
+        const xmath::radian     DeltaYaw        = RootLastFrame.m_Rotation.ToEuler().m_Yaw;
+        const xmath::fquat      DeltaRot        = xmath::fquat( xmath::radian3(0_xdeg,DeltaYaw,0_xdeg) );
 
         for( std::int32_t i=0; i<nAffectedFrames*2; i++ )
         {
-            const std::int32_t       iFrame    = ( nFrames - (nAffectedFrames - i) ) % nFrames;
-            auto&           NewFrame  =  ContinuesFrames[ i * nBones ];
-            const auto&     Frame     =  m_KeyFrame[iFrame * nBones ];
+            const std::int32_t  iFrame    = ( nFrames - (nAffectedFrames - i) ) % nFrames;
+            auto&               NewFrame  =  ContinuesFrames[ i * nBones ];
+            const auto&         Frame     =  m_KeyFrame[iFrame * nBones ];
 
             // Copy one frame worth of data
-            std::memcpy( &NewFrame, &Frame, sizeof(xcore::transform3) * nBones );
+            std::memcpy( &NewFrame, &Frame, sizeof(xmath::transform3) * nBones );
 
             // Set the base frames to be in the space of the space of the last frame loop
             if( iFrame < nAffectedFrames )
             {
-                NewFrame.m_Rotate     = DeltaRot * Frame.m_Rotate;
+                NewFrame.m_Rotation    = DeltaRot * Frame.m_Rotation;
 
-                const xcore::vector3 RelTrans = DeltaRot * Frame.m_Translate;
+                const xmath::fvec3 RelTrans = DeltaRot * Frame.m_Position;
 
-                NewFrame.m_Translate = RootLastFrame.m_Translate + RelTrans;
-                NewFrame.m_Translate.m_Y = Frame.m_Translate.m_Y;
+                NewFrame.m_Position = RootLastFrame.m_Position + RelTrans;
+                NewFrame.m_Position.m_Y = Frame.m_Position.m_Y;
             }
         }
     }
@@ -1277,7 +1267,7 @@ void anim::CleanLoopingAnim( void )
                 const auto      KeyFrame1    =  ContinuesFrames[ iFrame1 * nBones + b ];
                 auto&           KeyFrameDest =  NewFrames[ i       * nBones + b ];
             
-                KeyFrameDest.Blend( KeyFrame0, T, KeyFrame1 );
+                KeyFrameDest = xmath::transform3::fromBlend(KeyFrame0, KeyFrame1, T);
             }
         }
     }
@@ -1300,13 +1290,13 @@ void anim::CleanLoopingAnim( void )
             {
                 const auto&         KeyFrame0     =  ContinuesFrames[ iFrame0 * nBones + b ];
                 const auto&         KeyFrame1     =  ContinuesFrames[ iFrame1 * nBones + b ];
-                xcore::transform3   KeyFrameDest;
+                xmath::transform3   KeyFrameDest;
 
-                KeyFrameDest.Blend( KeyFrame0, T, KeyFrame1);
+                KeyFrameDest = xmath::transform3::fromBlend( KeyFrame0, KeyFrame1, T);
                 
                 auto&            KeyFrameFinal = NewFrames[ (j+i) * nBones + b ];
 
-                KeyFrameFinal.Blend( 0.5, KeyFrameDest );
+                KeyFrameFinal.Blend( KeyFrameDest, 0.5 );
             }
         }
     }
@@ -1317,8 +1307,8 @@ void anim::CleanLoopingAnim( void )
     {
         const auto              LastNewFrame  = NewFrames[ (nAffectedFrames-1) * nBones ];
         const auto              FirstNewFrame = NewFrames[ nAffectedFrames * nBones ];  
-        const auto              DeltaYaw      = LastNewFrame.m_Rotate.getRotation().m_Yaw; 
-        const xcore::quaternion DeltaRot      = xcore::quaternion( xcore::radian3(0_xdeg,-DeltaYaw,0_xdeg) );
+        const auto              DeltaYaw      = LastNewFrame.m_Rotation.ToEuler().m_Yaw; 
+        const xmath::fquat      DeltaRot      = xmath::fquat( xmath::radian3(0_xdeg,-DeltaYaw,0_xdeg) );
 
         for( std::int32_t i=0; i<nAffectedFrames*2; i++ )
         {
@@ -1328,16 +1318,16 @@ void anim::CleanLoopingAnim( void )
 
             if( iFrame < nAffectedFrames )
             {
-                NewFrame.m_Rotate     = DeltaRot * NewFrame.m_Rotate;
+                NewFrame.m_Rotation  = DeltaRot * NewFrame.m_Rotation;
 
-                xcore::vector3 Trans    = NewFrame.m_Translate - LastNewFrame.m_Translate;
-                Trans.m_Y = NewFrame.m_Translate.m_Y;
+                xmath::fvec3 Trans    = NewFrame.m_Position - LastNewFrame.m_Position;
+                Trans.m_Y = NewFrame.m_Position.m_Y;
 
-                NewFrame.m_Translate = DeltaRot * Trans;
+                NewFrame.m_Position = DeltaRot * Trans;
             }
 
             // Copy one frame worth of data
-            std::memcpy( &Frame, &NewFrame, sizeof(xcore::transform3) * nBones );
+            std::memcpy( &Frame, &NewFrame, sizeof(xmath::transform3) * nBones );
         }
     }
 }
