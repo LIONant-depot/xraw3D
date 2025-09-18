@@ -3,7 +3,7 @@
 #include "dependencies/assimp/include/assimp/scene.h"
 #include "dependencies/assimp/include/assimp/postprocess.h"
 
-#pragma message("**xraw3d_assimp_import.cpp** is adding assimp-vc143-mt.lib")
+#pragma message("***NOTE*** xraw3d_assimp_import.cpp is adding assimp-vc143-mt.lib")
 #pragma comment( lib, "dependencies/assimp/BINARIES/Win32/lib/Release/assimp-vc143-mt.lib" )
 
 namespace xraw3d::assimp {
