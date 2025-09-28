@@ -489,7 +489,7 @@ void geom::Serialize
 xmath::fbbox geom::getBBox( void ) const
 {
     xmath::fbbox BBox;
-    BBox.setZero();
+    BBox.setupZero();
     for( std::int32_t i=0; i<m_Vertex.size(); i++ )
     {
         BBox += m_Vertex[i].m_Position;
@@ -1710,7 +1710,7 @@ void geom::ComputeMeshBBox( std::int32_t iMesh, xmath::fbbox& BBox )
 {
     std::int32_t i,j;
 
-    BBox.setZero();
+    BBox.setupZero();
 
     for( i=0; i<m_Facet.size(); i++ )
     {
@@ -1735,7 +1735,7 @@ void geom::ComputeBoneInfo( void )
 
     // Clear all bone bboxes
     for (i = 0 ; i < m_Bone.size() ; i++)
-        m_Bone[i].m_BBox.setZero() ;
+        m_Bone[i].m_BBox.setupZero() ;
 
     // Loop through all the verts and add to bone bboxes
     for (i = 0 ; i < m_Vertex.size() ; i++)
