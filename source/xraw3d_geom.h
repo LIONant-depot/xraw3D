@@ -29,6 +29,10 @@ namespace xraw3d
             std::string                                     m_Name;
             std::int32_t                                    m_nBones;
 
+            mesh() = default;
+            mesh(const mesh&) = default;
+            mesh(mesh&&) = default;
+
             const mesh& operator = ( const mesh&A )
             {
                 m_Name   = A.m_Name;
@@ -82,7 +86,7 @@ namespace xraw3d
         // could in refer to the same material shader. Ideally a mesh should just point to
         // an actual material instance so that hopefully many meshes use a single instance.
         // this will the best case in terms of performance. Because all the meshes that can be
-        // render with the game material instance dont need any state changes except for vertex/index buffers.
+        // render with the game material instance don't need any state changes except for vertex/index buffers.
         // However most games dont really use this concept very much and most meshes have their own material instances,
         // with custom textures and tweaked parameters.
         struct material_instance
@@ -116,13 +120,16 @@ namespace xraw3d
             {
                 bool operator < ( const params& B ) const
                 {
-                    std::int32_t Answer = std::strcmp( m_Name.data(), B.m_Name.data() );
+                    if (m_Name.empty() )        return B.m_Name.empty() ? 0 : 1;
+                    else if (B.m_Name.empty())  return 0; else return 1;
+
+                    std::int32_t Answer = std::strcmp( m_Name.c_str(), B.m_Name.c_str() );
                     return Answer <= 0;
                 }
 
                 params_type                             m_Type;
-                std::array<char,256>                    m_Name;
-                std::array<char,256>                    m_Value;
+                std::string                             m_Name;
+                std::string                             m_Value;
             };
 
             material_instance& operator = ( const material_instance& Material )
@@ -199,6 +206,8 @@ namespace xraw3d
                                                             );
         static bool             CompareFaces                ( const geom::facet&            A
                                                             , const geom::facet&            B 
+                                                            );
+        int                     findMesh                    ( std::string_view MeshName 
                                                             );
     public:
 

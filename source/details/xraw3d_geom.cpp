@@ -1944,6 +1944,18 @@ bool geom::isBoneUsed( std::int32_t iBone )
 
 //--------------------------------------------------------------------------
 
+int geom::findMesh(std::string_view MeshName )
+{
+    for ( auto& E : m_Mesh )
+    {
+        if ( E.m_Name == MeshName ) return static_cast<int>(&E - m_Mesh.data());
+    }
+    return -1;
+}
+
+
+//--------------------------------------------------------------------------
+
 void geom::CollapseNormals( xmath::radian ThresholdAngle )
 {
     float     TargetAngle = xmath::Cos( ThresholdAngle );

@@ -27,6 +27,7 @@ namespace xraw3d
 
             xmath::fmat4            m_BindMatrix;
             xmath::fmat4            m_BindMatrixInv;
+            xmath::fmat4            m_NeutralPose;
         };
 
         using key_frame = xmath::transform3;
