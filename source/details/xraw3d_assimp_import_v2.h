@@ -15,6 +15,7 @@
 #include <cmath>
 #include <cassert>
 #include <cstdio>
+#include <set>
 
 // Assuming xraw3d namespace and geom struct as provided
 // Also assuming xmath namespace with fvec3, fquat, fbbox, fplane, fmat4 (if needed), etc.
@@ -28,6 +29,13 @@ namespace xraw3d::assimp_v2
     , FAILURE
     , ASSIMP_FAIL_TO_IMPORT
     , WARNING
+    };
+
+    struct node
+    {
+        std::string                 m_Name;
+        std::vector<node>           m_Children;
+        std::vector<std::uint32_t>  m_MeshList;
     };
 
     struct importer 
@@ -45,7 +53,7 @@ namespace xraw3d::assimp_v2
 
         settings m_Settings;
 
-        xerr Import(std::wstring_view FileName, geom& Geom) noexcept 
+        xerr Import(std::wstring_view FileName, geom& Geom, node& Node ) noexcept 
         {
             try
             {
@@ -95,6 +103,9 @@ namespace xraw3d::assimp_v2
                 m_pScene = pScene;
                 m_pGeom  = &Geom;
 
+                // Collect all the nodes in assimp... it may be usefull
+                Node = buildNodes(m_pScene->mRootNode, m_pScene);
+
                 m_MeshReferences.resize(pScene->mNumMeshes);
                 if (auto Err = SanityCheck(); Err ) 
                     return Err;
@@ -137,6 +148,27 @@ namespace xraw3d::assimp_v2
         geom*               m_pGeom             = nullptr;
         const aiScene*      m_pScene            = nullptr;
         
+        //--------------------------------------------------------------------------------------------------
+
+        node buildNodes(const aiNode* assimpNode, const aiScene* scene)
+        {
+            node n;
+            n.m_Name = assimpNode->mName.C_Str();
+
+            // Collect which meshes are used in this node
+            for (unsigned int i = 0; i < assimpNode->mNumMeshes; ++i) 
+            {
+                n.m_MeshList.push_back(assimpNode->mMeshes[i]);
+            }
+
+            // Recurse children
+            for (unsigned int k = 0; k < assimpNode->mNumChildren; ++k) 
+            {
+                n.m_Children.push_back(buildNodes(assimpNode->mChildren[k], scene));
+            }
+
+            return n;
+        }
 
         //--------------------------------------------------------------------------------------------------
 
