@@ -26,19 +26,9 @@ namespace xraw3d
 
         struct mesh
         {
-            std::string                                     m_Name;
+            std::string                                     m_ScenePath;    // Full path included nodes and such
+            std::string                                     m_Name;         // Just the basic name
             std::int32_t                                    m_nBones;
-
-            mesh() = default;
-            mesh(const mesh&) = default;
-            mesh(mesh&&) = default;
-
-            const mesh& operator = ( const mesh&A )
-            {
-                m_Name   = A.m_Name;
-                m_nBones = A.m_nBones;
-                return *this;
-            }
         };
 
         struct weight
@@ -120,8 +110,8 @@ namespace xraw3d
             {
                 bool operator < ( const params& B ) const
                 {
-                    if (m_Name.empty() )        return B.m_Name.empty() ? 0 : 1;
-                    else if (B.m_Name.empty())  return 0; else return 1;
+                    if (m_Name.empty() )   return B.m_Name.empty() ? 0 : 1;
+                    if (B.m_Name.empty())  return 0;
 
                     std::int32_t Answer = std::strcmp( m_Name.c_str(), B.m_Name.c_str() );
                     return Answer <= 0;
@@ -173,6 +163,9 @@ namespace xraw3d
                                                             );
         xmath::fbbox            getBBox                     ( void 
                                                             ) const;
+        void                    DeleteMesh                  ( int iMesh
+                                                            ) noexcept;
+
         void                    ComputeMeshBBox             ( std::int32_t                  iMesh
                                                             , xmath::fbbox&                 BBox 
                                                             );
@@ -202,13 +195,17 @@ namespace xraw3d
         void                    SortFacetsByMeshMaterialBone( void 
                                                             );
         static bool             TempVCompare                ( const geom::vertex&           A
-                                                            , const geom::vertex&           B 
+                                                            , const geom::vertex&           B
+                                                            , const float                   PositionEpsilon
                                                             );
         static bool             CompareFaces                ( const geom::facet&            A
                                                             , const geom::facet&            B 
                                                             );
-        int                     findMesh                    ( std::string_view MeshName 
+        int                     findMeshByName              ( std::string_view MeshName 
                                                             );
+        int                     findMeshByPath              (std::string_view MeshScenePath
+                                                            );
+
     public:
 
         std::vector<bone>                  m_Bone;

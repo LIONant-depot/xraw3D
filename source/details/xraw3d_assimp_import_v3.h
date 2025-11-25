@@ -4,6 +4,8 @@
 #include "dependencies/xstrtool/source/xstrtool.h"
 #include "dependencies/xerr/source/xerr.h"
 #include <functional>
+#include <string>
+#include <vector>
 
 
 #pragma message("***NOTE*** Import3d.h is adding to the program the assimp-vc143-mt.lib library")
@@ -157,7 +159,8 @@ namespace xraw3d::assimp_v3
         struct myMeshPart
         {
             std::string                         m_MeshName;
-            std::string                         m_Name;
+            //std::string                         m_Name;
+            std::string                         m_FullMeshName;
             std::vector<xraw3d::geom::vertex>   m_Vertices;
             std::vector<int>                    m_Indices;
             int                                 m_iMaterialInstance;
@@ -665,7 +668,7 @@ namespace xraw3d::assimp_v3
                     Transform.DecomposeNoScaling(presentRotation, p);
                 }
 
-                MeshPart.m_Name                 = AssimpMesh.mName.C_Str();
+                MeshPart.m_MeshName             = AssimpMesh.mName.C_Str();
                 MeshPart.m_iMaterialInstance    = AssimpMesh.mMaterialIndex;
                 MeshPart.m_Vertices.resize(AssimpMesh.mNumVertices);
                 for (auto i = 0u; i < AssimpMesh.mNumVertices; ++i)
@@ -742,8 +745,11 @@ namespace xraw3d::assimp_v3
                 }
             };
 
+            std::vector<std::string> Path;
             std::function<void(const aiNode&, const aiMatrix4x4&)> RecurseScene = [&]( const aiNode& Node, const aiMatrix4x4& ParentTransform)
             {
+                if (m_pScene->mRootNode != &Node) Path.push_back( std::format("{}/{}", Path.back(), Node.mName.C_Str()));
+
                 const aiMatrix4x4   Transform   = ParentTransform * Node.mTransformation;
                 auto                iBase       = MyNodes.size();
 
@@ -754,8 +760,11 @@ namespace xraw3d::assimp_v3
                 {
                     aiMesh& AssimpMesh = *m_pScene->mMeshes[Node.mMeshes[i]];
                     int iTexCordinates;
-                    if( ImportGeometryValidateMesh(AssimpMesh,iTexCordinates) ) continue;
+                    if( ImportGeometryValidateMesh( AssimpMesh, iTexCordinates) ) continue;
                     ProcessMesh(AssimpMesh, Transform, MyNodes[currentIndex], iTexCordinates );
+
+                    // Set the name of the mesh
+                    MyNodes[currentIndex].m_FullMeshName = std::format( "{}/{}", Path.back(), AssimpMesh.mName.C_Str() );
                     currentIndex++;
                 }
 
@@ -767,9 +776,12 @@ namespace xraw3d::assimp_v3
                 {
                     RecurseScene(*Node.mChildren[i], Transform);
                 }
+
+                Path.pop_back();
             };
 
             aiMatrix4x4 L2W;
+            Path.push_back(m_pScene->mRootNode->mName.C_Str());
             RecurseScene( *m_pScene->mRootNode, L2W );
         }
 
@@ -846,9 +858,10 @@ namespace xraw3d::assimp_v3
                 {
                     iFinalMesh = static_cast<int>(m_pGeom->m_Mesh.size());
                     m_pGeom->m_Mesh.emplace_back();
-                    m_pGeom->m_Mesh.back().m_Name   = E.m_MeshName.empty() ? "Default" : E.m_MeshName;
-                    m_pGeom->m_Mesh.back().m_nBones = 0; // To be computed later if needed
-                    MeshNameToIndex[E.m_MeshName]   = iFinalMesh;
+                    m_pGeom->m_Mesh.back().m_ScenePath  = E.m_FullMeshName;
+                    m_pGeom->m_Mesh.back().m_Name       = E.m_MeshName.empty() ? "Default" : E.m_MeshName;
+                    m_pGeom->m_Mesh.back().m_nBones     = 0; // To be computed later if needed
+                    MeshNameToIndex[E.m_MeshName]       = iFinalMesh;
                 }
 
                 const int baseVertex = static_cast<int>(m_pGeom->m_Vertex.size());
@@ -1432,7 +1445,7 @@ namespace xraw3d::assimp_v3
                 //
                 // Copy mesh name and Material Index
                 //
-                MyNodes[iMesh].m_Name               = AssimpMesh.mName.C_Str();
+                MyNodes[iMesh].m_MeshName           = AssimpMesh.mName.C_Str();
                 MyNodes[iMesh].m_iMaterialInstance  = AssimpMesh.mMaterialIndex;
 
                 // Get the global transform for the mesh node

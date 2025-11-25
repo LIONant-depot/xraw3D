@@ -4,6 +4,9 @@
 #else
     #define RMESH_SANITY
 #endif
+
+#include <unordered_set>
+
 namespace xraw3d {
 
 //--------------------------------------------------------------------------
@@ -486,6 +489,83 @@ void geom::Serialize
 
 //--------------------------------------------------------------------------
 
+void geom::DeleteMesh(int iMesh) noexcept
+{
+    assert (iMesh >= 0);
+    assert (static_cast<size_t>(iMesh) < m_Mesh.size());
+
+    // 1. Remove all facets belonging to this mesh
+    m_Facet.erase(
+        std::remove_if(m_Facet.begin(), m_Facet.end(),
+            [iMesh](const facet& f) { return f.m_iMesh == iMesh; }),
+        m_Facet.end());
+
+    // 2. Shift down mesh indices in remaining facets
+    for (auto& f : m_Facet)
+        if (f.m_iMesh > iMesh)
+            --f.m_iMesh;
+
+    // 3. Build set of used vertex indices after facet deletion
+    std::vector<bool> vertexUsed(m_Vertex.size(), false);
+    for (const auto& f : m_Facet)
+        for (std::int32_t i = 0; i < f.m_nVertices; ++i)
+            if (f.m_iVertex[i] >= 0)
+                vertexUsed[f.m_iVertex[i]] = true;
+
+    // 4. Remap vertices: build new vertex array + old -> new index map
+    std::vector<vertex> newVertices;
+    newVertices.reserve(m_Vertex.size());
+
+    std::vector<int> oldToNewVertex(m_Vertex.size(), -1);
+
+    for (size_t i = 0; i < m_Vertex.size(); ++i)
+    {
+        if (vertexUsed[i])
+        {
+            oldToNewVertex[i] = static_cast<int>(newVertices.size());
+            newVertices.push_back(std::move(m_Vertex[i]));
+        }
+    }
+
+    m_Vertex = std::move(newVertices);
+
+    // 5. Update all facet vertex indices
+    for (auto& f : m_Facet)
+        for (std::int32_t i = 0; i < f.m_nVertices; ++i)
+            if (f.m_iVertex[i] >= 0)
+                f.m_iVertex[i] = oldToNewVertex[f.m_iVertex[i]];
+
+    // 6. Clean up orphaned material instances (same as before)
+    std::unordered_set<int> usedMatInst;
+    for (const auto& f : m_Facet)
+        if (f.m_iMaterialInstance >= 0)
+            usedMatInst.insert(f.m_iMaterialInstance);
+
+    std::vector<material_instance> newMatInst;
+    newMatInst.reserve(m_MaterialInstance.size());
+    std::vector<int> oldToNewMat(m_MaterialInstance.size(), -1);
+
+    for (size_t i = 0; i < m_MaterialInstance.size(); ++i)
+    {
+        if (usedMatInst.count(static_cast<int>(i)))
+        {
+            oldToNewMat[i] = static_cast<int>(newMatInst.size());
+            newMatInst.push_back(std::move(m_MaterialInstance[i]));
+        }
+    }
+
+    m_MaterialInstance = std::move(newMatInst);
+
+    for (auto& f : m_Facet)
+        if (f.m_iMaterialInstance >= 0)
+            f.m_iMaterialInstance = oldToNewMat[f.m_iMaterialInstance];
+
+    // 7. Finally remove the mesh itself
+    m_Mesh.erase(m_Mesh.begin() + iMesh);
+}
+
+//--------------------------------------------------------------------------
+
 xmath::fbbox geom::getBBox( void ) const
 {
     xmath::fbbox BBox;
@@ -552,17 +632,16 @@ void geom::SortFacetsByMeshMaterialBone( void )
 
 //--------------------------------------------------------------------------
 
-bool geom::TempVCompare( const vertex& A, const vertex& B )
+bool geom::TempVCompare( const vertex& A, const vertex& B, float PositionEpsilon)
 {
     std::int32_t i;
 
     // Check position first
     {
-        static const float PEpsilon = 0.001f; 
         xmath::fvec3 T;
         T = A.m_Position - B.m_Position;
         float d = T.Dot( T );
-        if( d > PEpsilon ) return false;
+        if( d > (PositionEpsilon * PositionEpsilon) )  return false;
     }
     
     if( A.m_nWeights != B.m_nWeights ) return false;
@@ -635,8 +714,8 @@ bool geom::CompareFaces( const geom::facet& A, const geom::facet& B )
 {
     std::int32_t i;
 
-    if( A.m_iMesh     != B.m_iMesh     ) return false;
-    if( A.m_nVertices != B.m_nVertices ) return false;
+    if( A.m_iMesh             != B.m_iMesh             ) return false;
+    if( A.m_nVertices         != B.m_nVertices         ) return false;
     if( A.m_iMaterialInstance != B.m_iMaterialInstance ) return false;
 
     for( i=0; i<A.m_nVertices; i++ )
@@ -705,6 +784,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
             }
         }
     }
+
     //
     // Sort weights from largest to smallest
     //
@@ -734,245 +814,193 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
     // Collapse vertices that are too close from each other and have 
     // the same properties.
     //
-    if (1)
     {
-        struct hash
+        constexpr float too_close_v = 0.0001f; // Defines how close is close...
+
+        struct hash_entry
         {
-            std::int32_t     m_iVRemap;
-            std::int32_t     m_iNext;
+            std::int32_t m_iNext = -1;
         };
 
         struct tempv
         {
-            std::int32_t     m_RemapIndex;     // Which vertex Index it shold now use.
-            std::int32_t     m_Index;          // Inde to the original vertex
-            std::int32_t     m_iNext;          // next node in the has
+            std::int32_t m_RemapIndex;  // New vertex index
+            std::int32_t m_Index;       // Original index
+            std::int32_t m_iNext = -1;  // Next in hash chain
         };
 
-        if ( m_Vertex.size() <= 0 )
-            throw(std::runtime_error( "geom has not vertices" ));
+        if (m_Vertex.empty())
+            throw std::runtime_error("geom has no vertices");
 
-        std::int32_t                i;
-        std::vector<hash>           Hash;
-        std::vector<tempv>          TempV;
-        const std::int32_t          HashDimension  = std::max( 20, std::int32_t(std::sqrtf((float)m_Vertex.size())) );
-        const std::int32_t          HashSize       = HashDimension * HashDimension;
-        float                       MaxX, MinX, XShift;
-        float                       MaxZ, MinZ, ZShift;
+        const std::int32_t hash_dim = std::max<std::int32_t>(20, static_cast<std::int32_t>(std::sqrt(static_cast<float>(m_Vertex.size()))));
+        const std::int32_t hash_size = hash_dim * hash_dim;
 
-        // Allocate memory
-        Hash.resize( HashSize );
-        TempV.resize( m_Vertex.size() );
+        std::vector<hash_entry> hash_table(hash_size);
+        std::vector<tempv> temp_vertices(m_Vertex.size());
 
-        // Initialize the hash with terminators
-        for ( i = 0; i < HashSize; i++ )
+        // Initialize temp_vertices
+        for (std::int32_t i = 0; i < static_cast<std::int32_t>(m_Vertex.size()); ++i)
         {
-            Hash[ i ].m_iNext = -1;
+            temp_vertices[i].m_RemapIndex = i;
+            temp_vertices[i].m_Index = i;
         }
 
-        // Fill the nodes for each of the dimensions
-        MaxX = m_Vertex[ 0 ].m_Position.m_X;
-        MaxZ = m_Vertex[ 0 ].m_Position.m_Z;
-        MinX = MaxX;
-        MinZ = MaxZ;
+        // Compute bounds, skipping crazy vertices
+        constexpr float crazy_max_v = 100000000.0f;
+        float max_x = -crazy_max_v;
+        float min_x =  crazy_max_v;
+        float max_z = -crazy_max_v;
+        float min_z =  crazy_max_v;
+        std::int32_t total_crazy = 0;
+
+        for (std::int32_t i = 0; i < static_cast<std::int32_t>(m_Vertex.size()); ++i)
         {
-            std::int32_t TotalCrazyVerts = 0;
-            for ( i = 0; i < m_Vertex.size(); i++ )
+            const auto& pos = m_Vertex[i].m_Position;
+            const float x_dis_min = std::abs(max_x - pos.m_X);
+            const float x_dis_max = std::abs(pos.m_X - min_x);
+            if (x_dis_min > crazy_max_v || x_dis_max > crazy_max_v)
             {
-                static const float CrazyMax = 10000.f;
-
-                TempV[ i ].m_Index = i;
-                TempV[ i ].m_iNext = -1;
-                TempV[ i ].m_RemapIndex = i;
-
-                //
-                // Watch out for crazy verts
-                //
-                const float XDisMin = std::abs( MaxX - m_Vertex[ i ].m_Position.m_X );
-                const float XDisMax = std::abs( m_Vertex[ i ].m_Position.m_X-MinX   );
-
-                if ( XDisMin > CrazyMax || XDisMax > CrazyMax )
-                {
-                    TotalCrazyVerts++;
-                    continue;
-                }
-
-                const float ZDisMin = std::abs( MaxZ - m_Vertex[ i ].m_Position.m_Z );
-                const float ZDisMax = std::abs( m_Vertex[ i ].m_Position.m_Z-MinZ   );
-
-                if ( ZDisMin > CrazyMax || ZDisMax > CrazyMax )
-                {
-                    TotalCrazyVerts++;
-                    continue;
-                }
-
-                //
-                // Get the max
-                //
-                MaxX = std::max( MaxX, m_Vertex[ i ].m_Position.m_X );
-                MinX = std::min( MinX, m_Vertex[ i ].m_Position.m_X );
-                MaxZ = std::max( MaxZ, m_Vertex[ i ].m_Position.m_Z );
-                MinZ = std::min( MinZ, m_Vertex[ i ].m_Position.m_Z );
+                ++total_crazy;
+                continue;
+            }
+            const float z_dis_min = std::abs(max_z - pos.m_Z);
+            const float z_dis_max = std::abs(pos.m_Z - min_z);
+            if (z_dis_min > crazy_max_v || z_dis_max > crazy_max_v)
+            {
+                ++total_crazy;
+                continue;
             }
 
-            if ( TotalCrazyVerts > 5000 )
-                throw(std::runtime_error( "ERROR: We have too many vertices that are outside an acceptable range" ));
-
+            max_x = std::max(max_x, pos.m_X);
+            min_x = std::min(min_x, pos.m_X);
+            max_z = std::max(max_z, pos.m_Z);
+            min_z = std::min(min_z, pos.m_Z);
         }
 
-        // Hash all the vertices into the hash table
-        XShift = ( HashDimension - 1 ) / ( (MaxX - MinX) + 1 );
-        ZShift = ( HashDimension - 1 ) / ( (MaxZ - MinZ) + 1 );
-        for ( i = 0; i < m_Vertex.size(); i++ )
+        if (total_crazy > 5000)
+            throw std::runtime_error("ERROR: We have too many vertices that are outside an acceptable range");
+
+        // Handle degenerate bounds
+        if (max_x - min_x < 1e-6f) { max_x += 1.0f; min_x -= 1.0f; }
+        if (max_z - min_z < 1e-6f) { max_z += 1.0f; min_z -= 1.0f; }
+
+        // Compute shifts
+        const float x_shift = static_cast<float>(hash_dim - 1) / (max_x - min_x);
+        const float z_shift = static_cast<float>(hash_dim - 1) / (max_z - min_z);
+
+        // Hash all vertices
+        for (std::int32_t i = 0; i < static_cast<std::int32_t>(m_Vertex.size()); ++i)
         {
-            const std::int32_t XOffSet = (std::int32_t)std::clamp( ( ( m_Vertex[ i ].m_Position.m_X - MinX ) * XShift ), 0.f, (float)HashDimension );
-            const std::int32_t ZOffSet = (std::int32_t)std::clamp( ( ( m_Vertex[ i ].m_Position.m_Z - MinZ ) * ZShift ), 0.f, (float)HashDimension );
+            const auto& pos = m_Vertex[i].m_Position;
+            const std::int32_t x_offset = static_cast<std::int32_t>(std::clamp((pos.m_X - min_x) * x_shift, 0.0f, static_cast<float>(hash_dim - 1)));
+            const std::int32_t z_offset = static_cast<std::int32_t>(std::clamp((pos.m_Z - min_z) * z_shift, 0.0f, static_cast<float>(hash_dim - 1)));
+            const std::int32_t entry = x_offset + hash_dim * z_offset;
 
-            assert( XOffSet >= 0 );
-            assert( XOffSet < HashDimension );
-            assert( ZOffSet >= 0 );
-            assert( ZOffSet < HashDimension );
-
-            const std::int32_t   iEntry      = XOffSet + HashDimension * ZOffSet;
-            hash&       HashEntry   = Hash[ iEntry ];
-
-            TempV[ i ].m_iNext      = HashEntry.m_iNext;
-            HashEntry.m_iNext       = i;
+            temp_vertices[i].m_iNext = hash_table[entry].m_iNext;
+            hash_table[entry].m_iNext = i;
         }
 
-        //xcore::scheduler::channel BlockJobs( xconst_universal_str("CleanMesh") );
-
-        // Now do a seach for each vertex
-        for ( std::int32_t i = 0; i < HashSize; i++ )
+        // Search for duplicates in neighborhood
+        for (std::int32_t h = 0; h < hash_size; ++h)
         {
-            const std::int32_t XCell     = (i%HashDimension);
-            const std::int32_t ZCell     = (i/HashDimension);
-            const std::int32_t XFrom     = std::max( 0, XCell );
-            const std::int32_t ZFrom     = std::max( 0, ZCell );
-            const std::int32_t XTo       = std::min( HashDimension-1, XCell + 1);
-            const std::int32_t ZTo       = std::min( HashDimension-1, ZCell + 1);
+            const std::int32_t x_cell = h % hash_dim;
+            const std::int32_t z_cell = h / hash_dim;
+            const std::int32_t x_from = std::max(0, x_cell - 1);
+            const std::int32_t z_from = std::max(0, z_cell - 1);
+            const std::int32_t x_to = std::min(hash_dim - 1, x_cell + 1) + 1;
+            const std::int32_t z_to = std::min(hash_dim - 1, z_cell + 1) + 1;
 
-            for ( std::int32_t k = Hash[ i ].m_iNext; k != -1; k = TempV[ k ].m_iNext )
+            for (std::int32_t k = hash_table[h].m_iNext; k != -1; k = temp_vertices[k].m_iNext)
             {
-                const tempv& TempVKeyEntry = TempV[ k ];
-
-                // This vertex has been remap
-                if ( TempVKeyEntry.m_RemapIndex != TempVKeyEntry.m_Index )
+                auto& key_entry = temp_vertices[k];
+                if (key_entry.m_RemapIndex != key_entry.m_Index)
                     continue;
 
-                for ( std::int32_t x=XFrom; x!=XTo; ++x )
-                for ( std::int32_t z=ZFrom; z!=ZTo; ++z )
+                for (std::int32_t x = x_from; x < x_to; ++x)
                 {
-                    const std::int32_t   iHash       = x + z * HashDimension;
-                    const hash& ExploreHash = Hash[ iHash ];
-                    const bool bSameHash   = iHash == i;
-
-                  //  BlockJobs.SubmitJob( [this, &ExploreHash, &TempVKeyEntry, k, &TempV, bSameHash ]()
+                    for (std::int32_t z = z_from; z < z_to; ++z)
                     {
-                        std::int32_t TotalEntryPerCell = 0;
-                        std::int32_t iStartNode;
+                        const std::int32_t ihash = x + z * hash_dim;
+                        if (ihash >= hash_size) continue;
 
-                        if ( bSameHash ) 
-                            iStartNode = TempV[ k ].m_iNext;
-                        else
-                            iStartNode = ExploreHash.m_iNext;
+                        const bool same_hash = (ihash == h);
+                        std::int32_t start_node = same_hash ? temp_vertices[k].m_iNext : hash_table[ihash].m_iNext;
 
-                        // Seach all the nodes inside this hash
-                        for ( std::int32_t j = iStartNode; j != -1; j = TempV[ j ].m_iNext )
+                        for (std::int32_t j = start_node; j != -1; j = temp_vertices[j].m_iNext)
                         {
-                            tempv& VEntryTest = TempV[ j ];
-
-                            TotalEntryPerCell++;
-
-                            assert ( &VEntryTest != &TempVKeyEntry );
-
-                            // This vertex has been remap
-                            if ( VEntryTest.m_RemapIndex != VEntryTest.m_Index )
+                            auto& v_test = temp_vertices[j];
+                            if (v_test.m_RemapIndex != v_test.m_Index)
                                 continue;
 
-                            // If both vertices are close then remap vertex
-                            if ( TempVCompare( m_Vertex[ TempVKeyEntry.m_RemapIndex ], m_Vertex[ VEntryTest.m_Index ] ) )
-                                VEntryTest.m_RemapIndex = TempVKeyEntry.m_RemapIndex;
+                            if (TempVCompare(m_Vertex[key_entry.m_RemapIndex], m_Vertex[v_test.m_Index], too_close_v))
+                                v_test.m_RemapIndex = key_entry.m_RemapIndex;
                         }
-
-                        assert( TotalEntryPerCell < (m_Vertex.size()/4) );
                     }
-                    //);
                 }
-
-                //BlockJobs.join();
             }
         }
+
         RMESH_SANITY
 
-        // Okay now we must collapse all the unuse vertices
-        std::int32_t nVerts = 0;
-        for ( i = 0; i < m_Vertex.size(); i++ )
+        // Count unique vertices and mark remaps
+        std::int32_t n_verts = 0;
+        for (std::int32_t i = 0; i < static_cast<std::int32_t>(m_Vertex.size()); ++i)
         {
-            if ( TempV[ i ].m_RemapIndex == TempV[ i ].m_Index )
+            if (temp_vertices[i].m_RemapIndex == temp_vertices[i].m_Index)
             {
-                TempV[ i ].m_RemapIndex = nVerts;
-                TempV[ i ].m_Index      = -1;      // Mark as we have cranch it
-                nVerts++;
+                temp_vertices[i].m_RemapIndex = n_verts++;
+                temp_vertices[i].m_Index = -1;  // Mark as kept
             }
         }
 
         RMESH_SANITY
 
-        // OKay now get all the facets and remap their indices
-        for ( i = 0; i < m_Facet.size(); i++ )
-        for ( std::int32_t j = 0; j < m_Facet[ i ].m_nVertices; j++ )
+        // Remap facet indices
+        for (auto& facet : m_Facet)
         {
-            std::int32_t&    iVert  = m_Facet[ i ].m_iVertex[ j ];
-            std::int32_t     iRemap = TempV[ iVert ].m_RemapIndex;
-
-            if ( TempV[ iVert ].m_Index == -1 )
+            for (std::int32_t j = 0; j < facet.m_nVertices; ++j)
             {
-                iVert = iRemap;
-            }
-            else
-            {
-                iVert = TempV[ iRemap ].m_RemapIndex;
-                assert( TempV[ iRemap ].m_Index == -1 );
+                std::int32_t& ivert = facet.m_iVertex[j];
+                std::int32_t iremap = temp_vertices[ivert].m_RemapIndex;
+                if (temp_vertices[ivert].m_Index == -1)
+                {
+                    ivert = iremap;
+                }
+                else
+                {
+                    ivert = temp_vertices[iremap].m_RemapIndex;
+                }
             }
         }
 
         RMESH_SANITY
 
-        // Now copy the vertices to their final location
-        std::vector<vertex>    Vertex;
-        Vertex.resize( nVerts );
-
-        for ( i = 0; i < m_Vertex.size(); i++ )
+        // Create new vertex array
+        std::vector<vertex> new_vertices(n_verts);
+        for (std::int32_t i = 0; i < static_cast<std::int32_t>(m_Vertex.size()); ++i)
         {
-            std::int32_t iRemap = TempV[ i ].m_RemapIndex;
-
-            if ( TempV[ i ].m_Index == -1 )
+            const std::int32_t iremap = temp_vertices[i].m_RemapIndex;
+            if (temp_vertices[i].m_Index == -1)
             {
-                Vertex[ iRemap ] = m_Vertex[ i ];
+                new_vertices[iremap] = std::move(m_Vertex[i]);
             }
-            /*
-            else
-            {
-                Vertex[ TempV[ iRemap ].m_RemapIndex ] = m_Vertex[ i ];
-            }
-            */
         }
 
         RMESH_SANITY
 
-        // Finally set the new count and
-        TotalVerticesRemoved += static_cast<int>(m_Vertex.size() - nVerts);
-        m_Vertex = std::move(Vertex);
+        // Update count
+        TotalVerticesRemoved += static_cast<int>(m_Vertex.size() - n_verts);
+        m_Vertex = std::move(new_vertices);
 
         RMESH_SANITY
     }
 
     RMESH_SANITY
 
-        //
-        // Elliminate any digenerated facets
-        //
+
+    //
+    // Elliminate any digenerated facets
+    //
     {
         std::int32_t i;
         std::int32_t nFacets = 0;
@@ -1009,9 +1037,9 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
 
     RMESH_SANITY
 
-        //
-        // Elliminate any unuse vertices
-        //
+    //
+    // Elliminate any unuse vertices
+    //
     REMOVE_VERTS_AGAIN :
     {
         std::int32_t     i, j;
@@ -1257,7 +1285,7 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         // Sort material parameters
         for ( material_instance& Material : m_MaterialInstance )
         {
-            std::sort( Material.m_Params.begin(), Material.m_Params.end() );
+            std::sort( Material.m_Params.begin(), Material.m_Params.end());
         }
     }
 
@@ -1307,76 +1335,33 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
     // Sort the meshes so that they are in alphabetical order
     //    
     {
-        std::int32_t i, j;
+        // Create a vector of indices and sort them based on mesh names
+        std::vector<std::int32_t> indices(m_Mesh.size());
+        for (std::int32_t i = 0; i < static_cast<std::int32_t>(m_Mesh.size()); ++i)
+            indices[i] = i;
 
-        struct mesh_info
-        {
-            mesh            m_Mesh;
-            std::int32_t    m_iOriginal;
-        };
-
-        std::vector<mesh_info> Mesh;
-        std::vector<std::int32_t>       Remap;
-        
-        Mesh.resize( m_Mesh.size() );
-        Remap.resize( m_Mesh.size() );
-        
-        for( i=0; i<m_Mesh.size(); i++ )
-        {
-            Mesh[i].m_Mesh       = m_Mesh[i];
-            Mesh[i].m_iOriginal  = i;
-        }
-
-        // sort the meshes
-        bool bSorted = false;
-        for ( j = 0; j < m_Mesh.size() && !bSorted; j++ )
-        {
-            bSorted = true;
-            for ( i = 0; i < m_Mesh.size()-1-j; i++ )
+        std::sort(indices.begin(), indices.end(),
+            [this](std::int32_t a, std::int32_t b) 
             {
-                if( Mesh[i].m_Mesh.m_Name == Mesh[i+1].m_Mesh.m_Name )
-                {
-                    bSorted        = false;
-                    mesh_info Temp = Mesh[i+1];
-                    Mesh[i+1]      = Mesh[i];
-                    Mesh[i]        = Temp;
-                }
-            }
-        }
-        
-        // sanity check to make sure we know how to sort
-        for ( i = 0; i < m_Mesh.size(); i++ )
-        {
-            if ( i < m_Mesh.size()-1 )
-            {
-                assert( Mesh[i].m_Mesh.m_Name == Mesh[i+1].m_Mesh.m_Name );
-            }
-        }
+                return m_Mesh[a].m_Name < m_Mesh[b].m_Name;
+            });
 
-        // copy over the original Meshes
-        for( i=0; i<m_Mesh.size(); i++ )
-        {
-            m_Mesh[i] = Mesh[i].m_Mesh;
-        }
+        // Create remap table: old index -> new index
+        std::vector<std::int32_t> remap(m_Mesh.size());
+        for (std::int32_t new_i = 0; new_i < static_cast<std::int32_t>(m_Mesh.size()); ++new_i)
+            remap[indices[new_i]] = new_i;
 
-        // build a remap table for the faces
-        for( i=0; i<m_Mesh.size(); i++ )
-        {
-            for ( j=0; j<m_Mesh.size(); j++ )
-            {
-                if ( Mesh[j].m_iOriginal == i )
-                {
-                    Remap[i] = j;
-                    break;
-                }
-            }
-        }
+        // Create a temporary copy of meshes in sorted order
+        std::vector<mesh> sorted_meshes(m_Mesh.size());
+        for (std::int32_t i = 0; i < static_cast<std::int32_t>(m_Mesh.size()); ++i)
+            sorted_meshes[i] = m_Mesh[indices[i]];
 
-        // remap the faces
-        for( i=0; i<m_Facet.size(); i++ )
-        {
-            m_Facet[i].m_iMesh = Remap[ m_Facet[i].m_iMesh ];
-        }
+        // Copy back to m_Mesh
+        m_Mesh = std::move(sorted_meshes);
+
+        // Remap facet mesh indices
+        for (auto& f : m_Facet)
+            f.m_iMesh = remap[f.m_iMesh];
     }
 
     //
@@ -1944,7 +1929,7 @@ bool geom::isBoneUsed( std::int32_t iBone )
 
 //--------------------------------------------------------------------------
 
-int geom::findMesh(std::string_view MeshName )
+int geom::findMeshByName(std::string_view MeshName )
 {
     for ( auto& E : m_Mesh )
     {
@@ -1953,6 +1938,16 @@ int geom::findMesh(std::string_view MeshName )
     return -1;
 }
 
+//--------------------------------------------------------------------------
+
+int geom::findMeshByPath(std::string_view MeshScenePath)
+{
+    for (auto& E : m_Mesh)
+    {
+        if (E.m_ScenePath == MeshScenePath) return static_cast<int>(&E - m_Mesh.data());
+    }
+    return -1;
+}
 
 //--------------------------------------------------------------------------
 
