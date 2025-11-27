@@ -661,12 +661,12 @@ namespace xraw3d::assimp_v3
         {
             auto ProcessMesh = [&](const aiMesh& AssimpMesh, const aiMatrix4x4& Transform, myMeshPart& MeshPart, const int iTexCordinates )
             {
-                // get the rotation for the normals
-                aiQuaternion presentRotation;
-                {
-                    aiVector3D p;
-                    Transform.DecomposeNoScaling(presentRotation, p);
-                }
+                // Compute the inverse transpose for normal transformation
+                aiMatrix4x4 invTrans = Transform;
+                invTrans.Inverse();
+                invTrans.Transpose();
+                aiMatrix3x3 normalMatrix(invTrans);
+
 
                 MeshPart.m_MeshName             = AssimpMesh.mName.C_Str();
                 MeshPart.m_iMaterialInstance    = AssimpMesh.mMaterialIndex;
@@ -704,11 +704,11 @@ namespace xraw3d::assimp_v3
                     if (AssimpMesh.HasTangentsAndBitangents())
                     {
                         assert(AssimpMesh.HasNormals());
-                        const auto T = presentRotation.Rotate(AssimpMesh.mTangents[i]);
-                        const auto B = presentRotation.Rotate(AssimpMesh.mBitangents[i]);
-                        const auto N = presentRotation.Rotate(AssimpMesh.mNormals[i]);
-                        Vertex.m_nNormals   = 1;
-                        Vertex.m_nTangents  = 1;
+                        const auto T = normalMatrix * AssimpMesh.mTangents[i];
+                        const auto B = normalMatrix * AssimpMesh.mBitangents[i];
+                        const auto N = normalMatrix * AssimpMesh.mNormals[i];
+                        Vertex.m_nNormals = 1;
+                        Vertex.m_nTangents = 1;
                         Vertex.m_nBinormals = 1;
                         Vertex.m_BTN[0].m_Normal.setup(N.x, N.y, N.z);
                         Vertex.m_BTN[0].m_Tangent.setup(T.x, T.y, T.z);
@@ -719,9 +719,9 @@ namespace xraw3d::assimp_v3
                     }
                     else
                     {
-                        const auto N = presentRotation.Rotate(AssimpMesh.mNormals[i]);
-                        Vertex.m_nNormals   = 1;
-                        Vertex.m_nTangents  = 1;
+                        const auto N = normalMatrix * AssimpMesh.mNormals[i];
+                        Vertex.m_nNormals = 1;
+                        Vertex.m_nTangents = 1;
                         Vertex.m_nBinormals = 1;
                         Vertex.m_BTN[0].m_Normal.setup(N.x, N.y, N.z);
                         Vertex.m_BTN[0].m_Tangent.setup(1, 0, 0);
