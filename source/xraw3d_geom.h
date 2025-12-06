@@ -148,8 +148,10 @@ namespace xraw3d
                                                             );
         void                    Kill                        ( void 
                                                             );
-        void                    SanityCheck                 ( void 
+        void                    SanityCheck                 ( void
                                                             ) const;
+        void                    ComputeTangentsAndBinormalsMikk(int uvSet = 0
+                                                            );
         void                    CleanMesh                   ( std::int32_t                  iSubMesh = -1 
                                                             );  
         void                    CleanWeights                ( std::int32_t                  MaxNumWeights

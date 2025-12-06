@@ -5,6 +5,8 @@ FetchAndPopulate("https://github.com/LIONant-depot/xbitmap.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xtextfile.git" "main")
 FetchAndPopulate("https://github.com/LIONant-depot/xmath.git" "main")
 FetchAndPopulate("https://github.com/assimp/assimp.git" "master")
+FetchAndPopulate("https://github.com/mmikk/MikkTSpace.git" "master")
+
 if( assimp_POPULATED )
   # Configure the project for Visual Studio 2022 (Win32)
   message(STATUS "Configuring CMake project...")

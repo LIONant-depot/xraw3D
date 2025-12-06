@@ -6,6 +6,7 @@
 #endif
 
 #include <unordered_set>
+#include "dependencies/MikkTSpace/mikktspace.h"
 
 namespace xraw3d {
 
@@ -747,6 +748,88 @@ void geom::ForceAddColorIfNone(void)
             V.m_Color[0].m_Value = ~0u;
         }
     }
+}
+
+
+//--------------------------------------------------------------------------
+
+void geom::ComputeTangentsAndBinormalsMikk(int uvSet)
+{
+    struct MikkUserData
+    {
+        geom* pGeom;
+        int   uvSet;
+    };
+
+    auto getNumFaces = [](const SMikkTSpaceContext* pContext) -> int
+        {
+            MikkUserData* pUD = static_cast<MikkUserData*>(pContext->m_pUserData);
+            return static_cast<int>(pUD->pGeom->m_Facet.size());
+        };
+
+    auto getNumVertsOfFace = [](const SMikkTSpaceContext*, const int) -> int
+        {
+            return 3;
+        };
+
+    auto getPosition = [](const SMikkTSpaceContext* pContext, float fvPosOut[], const int iFace, const int iVert)
+        {
+            MikkUserData* pUD = static_cast<MikkUserData*>(pContext->m_pUserData);
+            int iV = pUD->pGeom->m_Facet[iFace].m_iVertex[iVert];
+            const xmath::fvec3& pos = pUD->pGeom->m_Vertex[iV].m_Position;
+            fvPosOut[0] = pos.m_X;
+            fvPosOut[1] = pos.m_Y;
+            fvPosOut[2] = pos.m_Z;
+        };
+
+    auto getNormal = [](const SMikkTSpaceContext* pContext, float fvNormalOut[], const int iFace, const int iVert)
+        {
+            MikkUserData* pUD = static_cast<MikkUserData*>(pContext->m_pUserData);
+            int iV = pUD->pGeom->m_Facet[iFace].m_iVertex[iVert];
+            const xmath::fvec3& n = pUD->pGeom->m_Vertex[iV].m_BTN[0].m_Normal;
+            fvNormalOut[0] = n.m_X;
+            fvNormalOut[1] = n.m_Y;
+            fvNormalOut[2] = n.m_Z;
+        };
+
+    auto getTexCoord = [](const SMikkTSpaceContext* pContext, float fvTexcOut[], const int iFace, const int iVert)
+        {
+            MikkUserData* pUD = static_cast<MikkUserData*>(pContext->m_pUserData);
+            int iV = pUD->pGeom->m_Facet[iFace].m_iVertex[iVert];
+            const xmath::fvec2& uv = pUD->pGeom->m_Vertex[iV].m_UV[pUD->uvSet];
+            fvTexcOut[0] = uv.m_X;
+            fvTexcOut[1] = uv.m_Y;
+        };
+
+    auto setTSpaceBasic = [](const SMikkTSpaceContext* pContext, const float fvTangent[], const float fSign, const int iFace, const int iVert)
+        {
+            MikkUserData* pUD = static_cast<MikkUserData*>(pContext->m_pUserData);
+            int iV = pUD->pGeom->m_Facet[iFace].m_iVertex[iVert];
+            btn& b = pUD->pGeom->m_Vertex[iV].m_BTN[0];
+            xmath::fvec3 tangent(fvTangent[0], fvTangent[1], fvTangent[2]);
+            xmath::fvec3 normal(b.m_Normal.m_X, b.m_Normal.m_Y, b.m_Normal.m_Z);
+            xmath::fvec3 binormal = fSign * normal.Cross(tangent);
+            b.m_Tangent = tangent;
+            b.m_Binormal = binormal;
+            pUD->pGeom->m_Vertex[iV].m_nTangents = 1;
+            pUD->pGeom->m_Vertex[iV].m_nBinormals = 1;
+        };
+
+    SMikkTSpaceInterface iface{};
+    iface.m_getNumFaces = getNumFaces;
+    iface.m_getNumVerticesOfFace = getNumVertsOfFace;
+    iface.m_getPosition = getPosition;
+    iface.m_getNormal = getNormal;
+    iface.m_getTexCoord = getTexCoord;
+    iface.m_setTSpaceBasic = setTSpaceBasic;
+    iface.m_setTSpace = nullptr;
+
+    SMikkTSpaceContext ctx{};
+    ctx.m_pInterface = &iface;
+    MikkUserData ud{ this, uvSet };
+    ctx.m_pUserData = &ud;
+
+    genTangSpaceDefault(&ctx);
 }
 
 //--------------------------------------------------------------------------
