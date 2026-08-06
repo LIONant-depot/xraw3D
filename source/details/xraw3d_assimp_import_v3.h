@@ -3,10 +3,10 @@
 #include "assimp/postprocess.h"
 #include "dependencies/xstrtool/source/xstrtool.h"
 #include "dependencies/xerr/source/xerr.h"
+#include <cctype>
 #include <functional>
 #include <string>
 #include <vector>
-
 
 #pragma message("***NOTE*** Import3d.h is adding to the program the assimp-vc143-mt.lib library")
 #pragma comment( lib, "dependencies/assimp/BINARIES/Win32/lib/Release/assimp-vc143-mt.lib")
@@ -1154,6 +1154,37 @@ namespace xraw3d::assimp_v3
                         NameToNode[Name]        = m_pScene->mRootNode->FindNode(Bone.mName);
                     }
                 }
+            }
+
+            //
+            // Also add any node tagged with the "vbone_" naming convention, even if no mesh has any
+            // vertex weighted to it. This is how a plain locator/socket node (e.g. an attachment point
+            // for a hat or a weapon) becomes a bone despite having no skin influence at all - normal
+            // bones are still only discovered above, via actual mesh bone-weight association.
+            //
+            {
+                auto IsVBoneTag = [](std::string_view Name) noexcept -> bool
+                {
+                    constexpr std::string_view Tag = "vbone_";
+                    if (Name.size() < Tag.size()) return false;
+                    for (auto i = 0u; i < Tag.size(); ++i)
+                        if (std::tolower(static_cast<unsigned char>(Name[i])) != Tag[i]) return false;
+                    return true;
+                };
+
+                std::function<void(const aiNode*)> GatherVBoneNodes = [&](const aiNode* pNode) noexcept
+                {
+                    const std::string Name = pNode->mName.C_Str();
+                    if (IsVBoneTag(Name) && NameToNode.count(Name) == 0)
+                    {
+                        NameToNode[Name] = pNode;
+                    }
+
+                    for (auto i = 0u; i < pNode->mNumChildren; ++i)
+                        GatherVBoneNodes(pNode->mChildren[i]);
+                };
+
+                GatherVBoneNodes(m_pScene->mRootNode);
             }
 
             //
