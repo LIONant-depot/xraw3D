@@ -928,17 +928,32 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
             temp_vertices[i].m_Index = i;
         }
 
-        // Compute bounds, skipping crazy vertices
+        // Compute bounds, skipping crazy vertices. Bootstrapped from the FIRST vertex rather than
+        // sentinel +-crazy_max_v extremes: seeding max_x=-100000000/min_x=+100000000 made the very
+        // first vertex's own check compare against those sentinels instead of real data - e.g.
+        // abs(-100000000 - pos.X) exceeds crazy_max_v for ANY pos.X > 0, so every vertex with a
+        // positive X (or Z) coordinate was wrongly flagged "crazy" until the first vertex with both
+        // X<=0 and Z<=0 finally happened to appear and seed real bounds. For a roughly X/Z-symmetric
+        // mesh (e.g. a humanoid character) that can easily misflag thousands of genuinely fine
+        // vertices before the real bounds ever get established, tripping the >5000 threshold below on
+        // otherwise-valid geometry.
         constexpr float crazy_max_v = 100000000.0f;
-        float max_x = -crazy_max_v;
-        float min_x =  crazy_max_v;
-        float max_z = -crazy_max_v;
-        float min_z =  crazy_max_v;
+        float max_x = 0, min_x = 0, max_z = 0, min_z = 0;
         std::int32_t total_crazy = 0;
+        bool bBoundsInitialized = false;
 
         for (std::int32_t i = 0; i < static_cast<std::int32_t>(m_Vertex.size()); ++i)
         {
             const auto& pos = m_Vertex[i].m_Position;
+
+            if (!bBoundsInitialized)
+            {
+                max_x = min_x = pos.m_X;
+                max_z = min_z = pos.m_Z;
+                bBoundsInitialized = true;
+                continue;
+            }
+
             const float x_dis_min = std::abs(max_x - pos.m_X);
             const float x_dis_max = std::abs(pos.m_X - min_x);
             if (x_dis_min > crazy_max_v || x_dis_max > crazy_max_v)
