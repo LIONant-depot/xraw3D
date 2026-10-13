@@ -3,6 +3,7 @@
 #include "assimp/postprocess.h"
 #include "dependencies/xstrtool/source/xstrtool.h"
 #include "dependencies/xerr/source/xerr.h"
+#include <algorithm>
 #include <cctype>
 #include <functional>
 #include <string>
@@ -190,10 +191,21 @@ namespace xraw3d::assimp_v3
             node n;
             n.m_Name = assimpNode->mName.C_Str();
 
-            // Collect which meshes are used in this node
+            // Collect which meshes are used in this node: indices into the FINAL mesh list (m_pGeom->m_Mesh), not assimp's. The final
+            // meshes are merged by name (a mesh instanced by several nodes, parts of one name) and invalid assimp meshes are skipped,
+            // so assimp's index can point past the final list (it did: an FBX with instanced doors). Matched by the assimp mesh's
+            // name; a name with no final mesh (a skin mesh renamed after its node) keeps the old index when it is in range.
             for (unsigned int i = 0; i < assimpNode->mNumMeshes; ++i)
             {
-                n.m_MeshList.push_back(assimpNode->mMeshes[i]);
+                const auto  iAssimp = assimpNode->mMeshes[i];
+                const char* pName   = scene->mMeshes[iAssimp]->mName.C_Str();
+                if (m_pGeom == nullptr) { n.m_MeshList.push_back(iAssimp); continue; }   // nodes without geometry: assimp's indices
+                int         iFinal  = -1;
+                for (std::size_t m = 0; m < m_pGeom->m_Mesh.size(); ++m)
+                    if (m_pGeom->m_Mesh[m].m_Name == (pName[0] ? pName : "Default")) { iFinal = static_cast<int>(m); break; }
+                if (iFinal < 0 && iAssimp < m_pGeom->m_Mesh.size()) iFinal = static_cast<int>(iAssimp);
+                if (iFinal < 0) continue;                                       // skipped by the import (invalid mesh)
+                if (std::find(n.m_MeshList.begin(), n.m_MeshList.end(), std::uint32_t(iFinal)) == n.m_MeshList.end()) n.m_MeshList.push_back(iFinal);
             }
 
             // Recurse children
