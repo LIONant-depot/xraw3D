@@ -598,6 +598,22 @@ namespace xraw3d::assimp_v3
                         MatI.m_Params.push_back(p);
                     }
                 }
+
+                //
+                // PBR maps (FBX/glTF): glTF gives the same metallic-roughness file for both (roughness in G, metalness in B)
+                //
+                for (auto [Type, pName] : { std::pair{ aiTextureType_DIFFUSE_ROUGHNESS, "RoughnessMap" }, std::pair{ aiTextureType_METALNESS, "MetalnessMap" }, std::pair{ aiTextureType_AMBIENT_OCCLUSION, "AmbientOcclusionMap" } })
+                {
+                    aiString szPath;
+                    if (AI_SUCCESS == aiGetMaterialTexture(pcMat, Type, 0, &szPath))
+                    {
+                        geom::material_instance::params p;
+                        p.m_Type    = geom::material_instance::params_type::TEXTURE;
+                        p.m_Name    = pName;
+                        p.m_Value   = szPath.C_Str();
+                        MatI.m_Params.push_back(p);
+                    }
+                }
             }
 
             //
