@@ -5,6 +5,7 @@
     #define RMESH_SANITY
 #endif
 
+#include <unordered_map>
 #include <unordered_set>
 #include "dependencies/MikkTSpace/mikktspace.h"
 
@@ -900,10 +901,6 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
     {
         constexpr float too_close_v = 0.0001f; // Defines how close is close...
 
-        struct hash_entry
-        {
-            std::int32_t m_iNext = -1;
-        };
 
         struct tempv
         {
@@ -915,10 +912,6 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         if (m_Vertex.empty())
             throw std::runtime_error("geom has no vertices");
 
-        const std::int32_t hash_dim = std::max<std::int32_t>(20, static_cast<std::int32_t>(std::sqrt(static_cast<float>(m_Vertex.size()))));
-        const std::int32_t hash_size = hash_dim * hash_dim;
-
-        std::vector<hash_entry> hash_table(hash_size);
         std::vector<tempv> temp_vertices(m_Vertex.size());
 
         // Initialize temp_vertices
@@ -978,62 +971,63 @@ void geom::CleanMesh( std::int32_t iMesh /* = -1 */ ) // Remove this Mesh
         if (total_crazy > 5000)
             throw std::runtime_error("ERROR: We have too many vertices that are outside an acceptable range");
 
-        // Handle degenerate bounds
-        if (max_x - min_x < 1e-6f) { max_x += 1.0f; min_x -= 1.0f; }
-        if (max_z - min_z < 1e-6f) { max_z += 1.0f; min_z -= 1.0f; }
-
-        // Compute shifts
-        const float x_shift = static_cast<float>(hash_dim - 1) / (max_x - min_x);
-        const float z_shift = static_cast<float>(hash_dim - 1) / (max_z - min_z);
-
-        // Hash all vertices
-        for (std::int32_t i = 0; i < static_cast<std::int32_t>(m_Vertex.size()); ++i)
+        // Hash every vertex by the too_close_v sized 3D cell its position is in: two vertices close enough to merge are in the same cell or in
+        // touching ones, so a vertex is compared only with the few in the 27 cells around it. (A grid over X and Z only, sized by the vertex count,
+        // made cells units wide and unbounded in Y: every vertex of a wall or of a stack of chairs fell in the same few cells, and comparing each with
+        // all of them was quadratic - a 330k triangle scene, conference.obj, never finished.)
+        struct cell_key
         {
-            const auto& pos = m_Vertex[i].m_Position;
-            const std::int32_t x_offset = static_cast<std::int32_t>(std::clamp((pos.m_X - min_x) * x_shift, 0.0f, static_cast<float>(hash_dim - 1)));
-            const std::int32_t z_offset = static_cast<std::int32_t>(std::clamp((pos.m_Z - min_z) * z_shift, 0.0f, static_cast<float>(hash_dim - 1)));
-            const std::int32_t entry = x_offset + hash_dim * z_offset;
+            std::int64_t m_X, m_Y, m_Z;
+            bool operator==(const cell_key&) const noexcept = default;
+        };
+        struct cell_hash
+        {
+            std::size_t operator()(const cell_key& K) const noexcept
+            {
+                std::uint64_t H = static_cast<std::uint64_t>(K.m_X) * 0x9E3779B97F4A7C15ull;
+                H ^= static_cast<std::uint64_t>(K.m_Y) * 0xC2B2AE3D27D4EB4Full + (H << 6) + (H >> 2);
+                H ^= static_cast<std::uint64_t>(K.m_Z) * 0x165667B19E3779F9ull + (H << 6) + (H >> 2);
+                return static_cast<std::size_t>(H);
+            }
+        };
+        const auto CellOf = [&](const xmath::fvec3& P) noexcept
+        {
+            return cell_key{ static_cast<std::int64_t>(std::floor(P.m_X / too_close_v))
+                           , static_cast<std::int64_t>(std::floor(P.m_Y / too_close_v))
+                           , static_cast<std::int64_t>(std::floor(P.m_Z / too_close_v)) };
+        };
 
-            temp_vertices[i].m_iNext = hash_table[entry].m_iNext;
-            hash_table[entry].m_iNext = i;
+        std::unordered_map<cell_key, std::int32_t, cell_hash> hash_table;      // cell -> its first vertex, the rest chained by m_iNext
+        hash_table.reserve(m_Vertex.size());
+        for (std::int32_t i = static_cast<std::int32_t>(m_Vertex.size()) - 1; i >= 0; --i)     // backwards: each chain is in index order
+        {
+            auto [It, bNew] = hash_table.try_emplace(CellOf(m_Vertex[i].m_Position), i);
+            if (!bNew) { temp_vertices[i].m_iNext = It->second; It->second = i; }
         }
 
-        // Search for duplicates in neighborhood
-        for (std::int32_t h = 0; h < hash_size; ++h)
+        // Each vertex not merged yet keeps itself and takes the later ones that match it (an earlier one that matched would have taken it already)
+        for (std::int32_t k = 0; k < static_cast<std::int32_t>(m_Vertex.size()); ++k)
         {
-            const std::int32_t x_cell = h % hash_dim;
-            const std::int32_t z_cell = h / hash_dim;
-            const std::int32_t x_from = std::max(0, x_cell - 1);
-            const std::int32_t z_from = std::max(0, z_cell - 1);
-            const std::int32_t x_to = std::min(hash_dim - 1, x_cell + 1) + 1;
-            const std::int32_t z_to = std::min(hash_dim - 1, z_cell + 1) + 1;
+            auto& key_entry = temp_vertices[k];
+            if (key_entry.m_RemapIndex != key_entry.m_Index)
+                continue;
 
-            for (std::int32_t k = hash_table[h].m_iNext; k != -1; k = temp_vertices[k].m_iNext)
+            const cell_key C = CellOf(m_Vertex[k].m_Position);
+            for (std::int64_t x = C.m_X - 1; x <= C.m_X + 1; ++x)
+            for (std::int64_t y = C.m_Y - 1; y <= C.m_Y + 1; ++y)
+            for (std::int64_t z = C.m_Z - 1; z <= C.m_Z + 1; ++z)
             {
-                auto& key_entry = temp_vertices[k];
-                if (key_entry.m_RemapIndex != key_entry.m_Index)
-                    continue;
+                const auto Cell = hash_table.find(cell_key{ x, y, z });
+                if (Cell == hash_table.end()) continue;
 
-                for (std::int32_t x = x_from; x < x_to; ++x)
+                for (std::int32_t j = Cell->second; j != -1; j = temp_vertices[j].m_iNext)
                 {
-                    for (std::int32_t z = z_from; z < z_to; ++z)
-                    {
-                        const std::int32_t ihash = x + z * hash_dim;
-                        if (ihash >= hash_size) continue;
+                    auto& v_test = temp_vertices[j];
+                    if (j <= k || v_test.m_RemapIndex != v_test.m_Index)
+                        continue;
 
-                        const bool same_hash = (ihash == h);
-                        std::int32_t start_node = same_hash ? temp_vertices[k].m_iNext : hash_table[ihash].m_iNext;
-
-                        for (std::int32_t j = start_node; j != -1; j = temp_vertices[j].m_iNext)
-                        {
-                            auto& v_test = temp_vertices[j];
-                            if (v_test.m_RemapIndex != v_test.m_Index)
-                                continue;
-
-                            if (TempVCompare(m_Vertex[key_entry.m_RemapIndex], m_Vertex[v_test.m_Index], too_close_v))
-                                v_test.m_RemapIndex = key_entry.m_RemapIndex;
-                        }
-                    }
+                    if (TempVCompare(m_Vertex[key_entry.m_RemapIndex], m_Vertex[v_test.m_Index], too_close_v))
+                        v_test.m_RemapIndex = key_entry.m_RemapIndex;
                 }
             }
         }
