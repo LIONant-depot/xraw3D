@@ -1715,6 +1715,13 @@ namespace xraw3d::assimp_v3
                             const auto& AssimpWeight    = AssimpBone.mWeights[iWeight];
                             auto&       MyWeight        = MyWeights[AssimpWeight.mVertexId];
 
+                            // A vertex moved by more bones than it can hold keeps the largest weights (it used to write past the end of the array)
+                            if (MyWeight.m_Count == static_cast<int>(MyWeight.m_Weights.size()))
+                            {
+                                auto Smallest = std::ranges::min_element(MyWeight.m_Weights, {}, &tmp_weight::m_Weight);
+                                if (Smallest->m_Weight < AssimpWeight.mWeight) *Smallest = { iSkeletonBone, AssimpWeight.mWeight };
+                                continue;
+                            }
                             MyWeight.m_Weights[MyWeight.m_Count].m_iBone = iSkeletonBone;
                             MyWeight.m_Weights[MyWeight.m_Count].m_Weight = AssimpWeight.mWeight;
 
@@ -1726,6 +1733,7 @@ namespace xraw3d::assimp_v3
                     //
                     // Sort weights, normalize and set to the final vert
                     //
+                    int nUnweighted = 0;
                     for (int iVertex = 0u; iVertex < MyWeights.size(); ++iVertex)
                     {
                         auto& E = MyWeights[iVertex];
@@ -1751,6 +1759,16 @@ namespace xraw3d::assimp_v3
                             }
                         }
 
+                        // A vertex no bone moves (skinned meshes can have some): it follows the node of its mesh, the root when that is not a bone
+                        if (E.m_Count == 0)
+                        {
+                            int iNodeBone = m_pGeom->getBoneIDFromName(m_MeshReferences[iMesh].m_Nodes[0]->mName.C_Str());
+                            if (iNodeBone < 0 || iNodeBone >= static_cast<int>(m_pGeom->m_Bone.size())) iNodeBone = 0;
+                            E.m_Weights[0] = { iNodeBone, 1.0f };
+                            E.m_Count      = 1;
+                            ++nUnweighted;
+                        }
+
                         // Copy Weight To the Vert
                         auto& V = MyNodes[iMesh].m_Vertices[iVertex];
                         V.m_nWeights = E.m_Count;
@@ -1761,6 +1779,8 @@ namespace xraw3d::assimp_v3
                             V.m_Weight[i].m_Weight = BW.m_Weight;
                         }
                     }
+
+                    if (nUnweighted) printf("WARNING: %d vertices of mesh %d are moved by no bone: they follow the node of the mesh\n", nUnweighted, iMesh);
 
                     //
                     // Sanity check (make sure that all the vertices have bone and weights
