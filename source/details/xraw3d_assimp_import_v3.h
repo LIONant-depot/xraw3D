@@ -5,6 +5,9 @@
 #include "dependencies/xerr/source/xerr.h"
 #include <algorithm>
 #include <cctype>
+#include <cmath>
+#include <filesystem>
+#include <format>
 #include <functional>
 #include <string>
 #include <vector>
@@ -38,6 +41,40 @@ namespace xraw3d::assimp_v3
     , WARNING
     };
 
+    // What one unit of a model file is in meters (the engine's unit), and how that is known
+    struct units
+    {
+        float                       m_MetersPerUnit = 1;
+        bool                        m_bFromFile     = false;    // the file says (an FBX's UnitScaleFactor, glTF's meters); else GuessUnits guesses from the size
+        std::string                 m_Reason;                   // for the log: "FBX unit cm (UnitScaleFactor 1), applied 0.01"
+    };
+
+    // A file without units: a model larger than LargestMeters (the largest its kind plausibly is in meters: a level, a character) is taken as
+    // centimeters, or as millimeters when even that is too large. Extent is the largest side of its box, in file units. A guess: the user's
+    // Scale is applied on top of it, and AutoUnits off skips it.
+    inline units GuessUnits(float Extent, float LargestMeters, std::string_view NoUnits) noexcept
+    {
+        units U;
+        if (Extent > LargestMeters)
+        {
+            const bool bCm = Extent * 0.01f <= LargestMeters;
+            U.m_MetersPerUnit = bCm ? 0.01f : 0.001f;
+            U.m_Reason = std::format("{}; its size ({:.0f} units) is too large for meters (a model of this kind is up to {:.0f} m): taken as {}, applied {}", NoUnits, Extent, LargestMeters, bCm ? "cm" : "mm", U.m_MetersPerUnit);
+        }
+        else U.m_Reason = std::format("{}; its size ({:.3g} units) fits meters: applied 1", NoUnits, Extent);
+        return U;
+    }
+
+    // The units of an imported model: what its file says (importer::settings::m_pUnits), else the guess from the box of its vertices
+    inline units ResolveUnits(const units& FromFile, const std::vector<xraw3d::geom::vertex>& Vertices, float LargestMeters) noexcept
+    {
+        if (FromFile.m_bFromFile || Vertices.empty()) return FromFile;
+        xmath::fvec3 Min = Vertices[0].m_Position, Max = Min;
+        for (const auto& V : Vertices) { Min = Min.Min(V.m_Position); Max = Max.Max(V.m_Position); }
+        const auto Size = Max - Min;
+        return GuessUnits(std::max({ Size.m_X, Size.m_Y, Size.m_Z }), LargestMeters, FromFile.m_Reason);
+    }
+
     struct node
     {
         std::string                 m_Name;
@@ -67,6 +104,7 @@ namespace xraw3d::assimp_v3
             node*           m_pNode                     = nullptr;      // Collect the hirarchy
             xraw3d::geom*   m_pGeom                     = nullptr;      // Import geometry
             anim_list*      m_pAnims                    = nullptr;      // Import all anims
+            units*          m_pUnits                    = nullptr;      // what the file says of its units (vertices stay in file units)
             xraw3d::anim*   m_pSkeleton                 = nullptr;      // Import the skeleton only
         };
 
@@ -122,6 +160,7 @@ namespace xraw3d::assimp_v3
 
             if( m_pScene == nullptr ) return xerr::create<state::ASSIMP_FAIL_TO_IMPORT, "Assimp failed to load a file">();
             if( auto Err = SanityCheck(); Err ) return Err;
+            if( Settings.m_pUnits ) *Settings.m_pUnits = DetectUnits(FileName);
 
             if( not m_bStaticGeom && (Settings.m_pGeom || Settings.m_pSkeleton || Settings.m_pAnims))
             {
@@ -183,6 +222,45 @@ namespace xraw3d::assimp_v3
         // FUNCTIONS
         //------------------------------------------------------------------------------------------------------
     protected:
+
+        //--------------------------------------------------------------------------------------------------
+        // The units of the file. FBX: UnitScaleFactor is the centimeters of one unit of the data (assimp leaves the vertices in it: no
+        // aiProcess_GlobalScale); glTF: meters by spec; OBJ and the rest have none (m_bFromFile false: the compiler guesses from the size)
+        units DetectUnits(std::wstring_view FileName) const noexcept
+        {
+            units        U;
+            std::wstring Ext = std::filesystem::path(FileName).extension().wstring();
+            for (auto& c : Ext) c = static_cast<wchar_t>(std::tolower(static_cast<int>(c)));
+
+            double Cm = 0;
+            if (const auto* pMeta = m_pScene->mMetaData)
+            {
+                float  F = 0;
+                double D = 0;
+                if      (pMeta->Get("UnitScaleFactor", F)) Cm = F;
+                else if (pMeta->Get("UnitScaleFactor", D)) Cm = D;
+            }
+            if (Cm > 0)
+            {
+                const auto Named = [&]() -> std::string
+                {
+                    struct unit { double m_Cm; const char* m_pName; };
+                    for (auto [C, Name] : { unit{ 0.1, "mm" }, unit{ 1, "cm" }, unit{ 2.54, "inch" }, unit{ 30.48, "foot" }, unit{ 100, "m" }, unit{ 100000, "km" } })
+                        if (std::abs(Cm - C) <= C * 1e-4) return Name;
+                    return std::format("{} cm", Cm);
+                };
+                U.m_MetersPerUnit = static_cast<float>(Cm / 100);
+                U.m_bFromFile     = true;
+                U.m_Reason        = std::format("FBX unit {} (UnitScaleFactor {}), applied {}", Named(), Cm, U.m_MetersPerUnit);
+            }
+            else if (Ext == L".gltf" || Ext == L".glb")
+            {
+                U.m_bFromFile = true;
+                U.m_Reason    = "glTF is in meters (by spec), applied 1";
+            }
+            else U.m_Reason = std::format("{} has no units", Ext.empty() ? std::string("the file") : xstrtool::To(Ext));
+            return U;
+        }
 
         //--------------------------------------------------------------------------------------------------
 
