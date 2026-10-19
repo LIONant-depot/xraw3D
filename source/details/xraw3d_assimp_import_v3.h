@@ -149,7 +149,8 @@ namespace xraw3d::assimp_v3
             | (Settings.m_bLimitBoneWeights       ? aiProcess_LimitBoneWeights : 0)       // 4 weights for skin model max
             | aiProcess_GenUVCoords                 // Convert any type of mapping to uv mapping
             | aiProcess_TransformUVCoords           // preprocess UV transformations (scaling, translation ...)
-            | aiProcess_FindInstances               // search for instanced meshes and remove them by references to one master
+            // aiProcess_FindInstances off: it folds identical meshes (a model's duplicated heads) into one shared by several nodes, which a skin mesh cannot be
+            //                                      // search for instanced meshes and remove them by references to one master
             | (Settings.m_bGenerateNormals        ? aiProcess_GenNormals       : 0)       // if it does not have normals generate them... (this may not be a good option as it may hide issues from artist)
             | (Settings.m_bGenerateTBNInformation ? aiProcess_CalcTangentSpace : 0)       // calculate tangents and bitangents if possible (definetly you will meed UVs)
                                                     // | aiProcess_JoinIdenticalVertices // join identical vertices/ optimize indexing (It seems to be creating cracks in the mesh... some bug?)
@@ -356,7 +357,8 @@ namespace xraw3d::assimp_v3
                     return pNode->mName.C_Str();
                 }
             }
-            return {};
+            // No MESH_ group: the mesh is its own node (an empty name merged every such mesh of the file into one "Default" mesh)
+            return Node.mName.C_Str();
         }
 
         //------------------------------------------------------------------------------------------------------
@@ -1398,7 +1400,7 @@ namespace xraw3d::assimp_v3
                     {
                         for (auto j = 0; j < i; ++j)
                         {
-                            if (Proto[j].m_pAssimpNode == ProtoBone.m_pAssimpNode->mParent)
+                            if (Proto[j].m_pAssimpNode == pNode)
                             {
                                 internalBone.parent = j;
                                 break;
