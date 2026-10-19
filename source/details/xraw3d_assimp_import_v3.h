@@ -154,7 +154,9 @@ namespace xraw3d::assimp_v3
             | (Settings.m_bGenerateNormals        ? aiProcess_GenNormals       : 0)       // if it does not have normals generate them... (this may not be a good option as it may hide issues from artist)
             | (Settings.m_bGenerateTBNInformation ? aiProcess_CalcTangentSpace : 0)       // calculate tangents and bitangents if possible (definetly you will meed UVs)
                                                     // | aiProcess_JoinIdenticalVertices // join identical vertices/ optimize indexing (It seems to be creating cracks in the mesh... some bug?)
-            | aiProcess_RemoveRedundantMaterials    // remove redundant materials
+            | aiProcess_PopulateArmatureData        // every bone knows its node (two armatures may share their bone names: by name they would find each other)
+            // aiProcess_RemoveRedundantMaterials off: it folds the materials that look the same into one (a model whose texture links were lost: its body and its hair are
+            //                                      // "the same" with no texture at all), and the materials of a model are the artist's: the importer finds their maps
             | aiProcess_FindInvalidData             // detect invalid model data, such as invalid normal vectors
             | (Settings.m_bFlipUVs ? aiProcess_FlipUVs : 0)   // flip the V to match the Vulkans way of doing UVs
             );
@@ -377,9 +379,11 @@ namespace xraw3d::assimp_v3
             for(int matIndex : UsedMaterials)
             {
                 AssimMaterialToGeomMaterial[matIndex] = newIndex++;
-                auto    pcMat   = m_pScene->mMaterials[matIndex];
+                const bool bInstanced = matIndex >= static_cast<int>(m_pScene->mNumMaterials);      // (see ImportGeometryStatic)
+                auto    pcMat   = m_pScene->mMaterials[bInstanced ? matIndex - static_cast<int>(m_pScene->mNumMaterials) : matIndex];
                 auto&   MatI    = m_pGeom->m_MaterialInstance.emplace_back();
                 MatI.m_Name = pcMat->GetName().C_Str();
+                if (bInstanced) MatI.m_Name += "|Dupli";
 
                 //
                 // Shading model
@@ -768,22 +772,64 @@ namespace xraw3d::assimp_v3
 
         void ImportGeometryStatic(std::vector<myMeshPart>& MyNodes)
         {
-            auto ProcessMesh = [&](const aiMesh& AssimpMesh, const aiMatrix4x4& Transform, myMeshPart& MeshPart, const int iTexCordinates )
+            auto ProcessMesh = [&](const aiMesh& AssimpMesh, const aiMatrix4x4& Transform, myMeshPart& MeshPart, const int iTexCordinates, const bool bInstanced )
             {
                 // Compute the inverse transpose for normal transformation
                 aiMatrix4x4 invTrans = Transform;
                 invTrans.Inverse();
                 invTrans.Transpose();
-                aiMatrix3x3 normalMatrix(invTrans);
+                const aiMatrix3x3 NodeNormalMatrix(invTrans);
 
 
                 MeshPart.m_MeshName             = AssimpMesh.mName.C_Str();
-                MeshPart.m_iMaterialInstance    = AssimpMesh.mMaterialIndex;
+                // The instances of a particle system (Blender names its nodes "...|Dupli|...": hair cards, grass blades) are a material of their own: the index after
+                // the scene's materials is the same material as an instance (ImportMaterials)
+                MeshPart.m_iMaterialInstance    = AssimpMesh.mMaterialIndex + (bInstanced ? m_pScene->mNumMaterials : 0u);
                 MeshPart.m_Vertices.resize(AssimpMesh.mNumVertices);
+
+                //
+                // A skinned mesh is stored at rest, its pose is in the bones: the vertices are put where the bones are now (the weighted sum of
+                // BoneGlobal * OffsetMatrix, what every FBX viewer does), so what was placed on the posed body (an instanced hair, say) sits on it.
+                // The mesh's own node does not place a skinned mesh. A vertex with no weight, or a mesh with none, goes by the node as always
+                //
+                std::vector<std::array<float, 16>> Skin;      // per vertex: the sum of weight * matrix
+                std::vector<float>                 SkinWeight;
+                if (AssimpMesh.HasBones())
+                {
+                    Skin.assign(AssimpMesh.mNumVertices, std::array<float, 16>{});
+                    SkinWeight.assign(AssimpMesh.mNumVertices, 0.0f);
+                    for (auto b = 0u; b < AssimpMesh.mNumBones; ++b)
+                    {
+                        const aiBone&       Bone  = *AssimpMesh.mBones[b];
+                        const aiNode* const pNode = Bone.mNode ? Bone.mNode : m_pScene->mRootNode->FindNode(Bone.mName);      // (by node: two armatures may share their bone names)
+                        if (!pNode) continue;
+                        const aiMatrix4x4 M = GetGlobalTransform(pNode) * Bone.mOffsetMatrix;
+                        const float*      pM = &M.a1;
+                        for (auto w = 0u; w < Bone.mNumWeights; ++w)
+                        {
+                            const auto& W = Bone.mWeights[w];
+                            if (W.mVertexId >= AssimpMesh.mNumVertices) continue;
+                            for (int k = 0; k < 16; ++k) Skin[W.mVertexId][k] += W.mWeight * pM[k];
+                            SkinWeight[W.mVertexId] += W.mWeight;
+                        }
+                    }
+                }
+                const auto SkinOf = [&](unsigned i) -> aiMatrix4x4
+                {
+                    if (SkinWeight.empty() || SkinWeight[i] <= 1.0e-6f) return Transform;
+                    aiMatrix4x4 M;
+                    float*      pM = &M.a1;
+                    for (int k = 0; k < 16; ++k) pM[k] = Skin[i][k] / SkinWeight[i];
+                    return M;
+                };
+
                 for (auto i = 0u; i < AssimpMesh.mNumVertices; ++i)
                 {
                     xraw3d::geom::vertex&   Vertex  = MeshPart.m_Vertices[i];
-                    auto                    L       = Transform * AssimpMesh.mVertices[i];
+                    const aiMatrix4x4       Pose    = SkinOf(i);
+                    auto                    L       = Pose * AssimpMesh.mVertices[i];
+                    const bool              bSkinned = !SkinWeight.empty() && SkinWeight[i] > 1.0e-6f;
+                    const aiMatrix3x3       normalMatrix = bSkinned ? aiMatrix3x3(Pose) : NodeNormalMatrix;    // (skinned: the inverse transpose of a rotation with a uniform scale is the matrix itself, normalized below)
                     Vertex.m_Position.setup(static_cast<float>(L.x), static_cast<float>(L.y), static_cast<float>(L.z));
 
                     // Collect multiple UVs
@@ -870,7 +916,7 @@ namespace xraw3d::assimp_v3
                     aiMesh& AssimpMesh = *m_pScene->mMeshes[Node.mMeshes[i]];
                     int iTexCordinates;
                     if( ImportGeometryValidateMesh( AssimpMesh, iTexCordinates) ) continue;
-                    ProcessMesh(AssimpMesh, Transform, MyNodes[currentIndex], iTexCordinates );
+                    ProcessMesh(AssimpMesh, Transform, MyNodes[currentIndex], iTexCordinates, std::string_view(Node.mName.C_Str()).find("|Dupli|") != std::string_view::npos );
 
                     // Set the name of the mesh
                     MyNodes[currentIndex].m_FullMeshName = std::format( "{}/{}", Path.back(), AssimpMesh.mName.C_Str() );
