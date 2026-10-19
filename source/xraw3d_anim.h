@@ -137,6 +137,28 @@ namespace xraw3d
                                                         ) ;
         void                    DeleteBone              (std::string_view   BoneName
                                                         ) ;
+        // The runtime joints of a source hierarchy (documentation/Editors/skeleton_runtime_folding_plan.md): every node a mesh is bound
+        // to and every node below one (whole chains: an unweighted forearm, physics/cloth/hair, end joints), never assimp's $AssimpFbx$
+        // pivot helpers; the root is the lowest common ancestor of the bound nodes, or a synthetic root when that is the scene's own root
+        // or a helper (a group holding several skeleton branches). A source with no bound node keeps every node but the helpers.
+        struct runtime_joints
+        {
+            std::vector<bool>   m_Keep;                     // per bone
+            bool                m_bSyntheticRoot = false;   // the kept tops hang under a new root (synthetic_root_name_v)
+        };
+        static constexpr std::string_view synthetic_root_name_v = "RuntimeRoot";
+        runtime_joints          RuntimeJoints           ( void
+                                                        ) const;
+
+        // Removes every bone Keep marks false, re-parenting each kept bone to its nearest kept ancestor (or the synthetic root) and
+        // baking the evaluated motion of the folded nodes into it: every frame's local key and the bind pose's local transform become
+        // G(new parent)^-1 * G(bone), so every kept bone's global transform is unchanged. The world bind inverses, which are global,
+        // stay as they are. A fold whose result does not fit translation/rotation/scale (non-uniform scale under a rotation makes shear)
+        // keeps the folded node instead; the names of the nodes kept that way are returned.
+        std::vector<std::string> FoldBones              ( const std::vector<bool>&  Keep
+                                                        , bool                      bSyntheticRoot
+                                                        , float                     Tolerance = 1.0e-3f
+                                                        );
         void                    DeleteDummyBones        ( void              // Deletes all bones with "dummy" in the name
                                                         ) ;
         bool                    ApplyNewSkeleton        ( const anim&       BindAnim 

@@ -847,6 +847,184 @@ void anim::DeleteBone( std::int32_t iBone )
 }
 
 //--------------------------------------------------------------------------
+// See xraw3d_anim.h and documentation/Editors/skeleton_runtime_folding_plan.md
+
+anim::runtime_joints anim::RuntimeJoints( void ) const
+{
+    const auto       n       = static_cast<std::int32_t>(m_Bone.size());
+    runtime_joints   Out;
+    Out.m_Keep.assign(n, false);
+
+    const auto IsHelper = [&](std::int32_t i) { return m_Bone[i].m_Name.find("$AssimpFbx$") != std::string::npos; };
+    const bool bAnyBound = std::any_of(m_Bone.begin(), m_Bone.end(), [](const bone& B) { return B.m_bHasBind; });
+    if (!bAnyBound)
+    {
+        for (std::int32_t i = 0; i < n; ++i) Out.m_Keep[i] = !IsHelper(i);
+        return Out;
+    }
+
+    // A bound node and every node below one (parents come before their children)
+    std::vector<bool> bBoundAbove(n, false);
+    for (std::int32_t i = 0; i < n; ++i)
+    {
+        const auto p   = m_Bone[i].m_iParent;
+        bBoundAbove[i] = p >= 0 && (m_Bone[p].m_bHasBind || bBoundAbove[p]);
+        Out.m_Keep[i]  = !IsHelper(i) && (m_Bone[i].m_bHasBind || bBoundAbove[i]);
+    }
+
+    // The root: the lowest common ancestor of the tops (bound nodes with nothing bound above them)
+    std::int32_t LCA = -2;
+    const auto Depth = [&](std::int32_t i) { std::int32_t d = 0; for (; m_Bone[i].m_iParent >= 0; i = m_Bone[i].m_iParent) ++d; return d; };
+    for (std::int32_t i = 0; i < n; ++i)
+    {
+        if (!m_Bone[i].m_bHasBind || bBoundAbove[i]) continue;
+        if (LCA == -2) { LCA = i; continue; }
+        std::int32_t A = LCA, B = i;
+        for (auto da = Depth(A), db = Depth(B); da > db; --da) A = m_Bone[A].m_iParent;
+        for (auto da = Depth(A), db = Depth(B); db > da; --db) B = m_Bone[B].m_iParent;
+        while (A != B) { A = m_Bone[A].m_iParent; B = m_Bone[B].m_iParent; }
+        LCA = A;
+    }
+
+    // A real node keeps the root; the scene's own root (a group holding several branches) or a helper gives way to a synthetic one
+    if (LCA >= 0)
+    {
+        if (!m_Bone[LCA].m_bHasBind && (m_Bone[LCA].m_iParent < 0 || IsHelper(LCA))) Out.m_bSyntheticRoot = true;
+        else                                                                          Out.m_Keep[LCA]     = true;
+    }
+    return Out;
+}
+
+//--------------------------------------------------------------------------
+
+std::vector<std::string> anim::FoldBones( const std::vector<bool>& KeepIn, bool bSyntheticRoot, float Tolerance )
+{
+    const auto                n = static_cast<std::int32_t>(m_Bone.size());
+    std::vector<bool>         Keep = KeepIn;
+    std::vector<std::string>  KeptForShear;
+    assert(static_cast<std::int32_t>(Keep.size()) == n);
+    for (std::int32_t i = 0; i < n; ++i) assert(m_Bone[i].m_iParent < i);      // parents come before their children
+
+    const auto Local = [](const xmath::fvec3& S, const xmath::fquat& R, const xmath::fvec3& T) { xmath::fmat4 M; M.setupSRT(S, R, T); return M; };
+    const auto Inverse = [](const xmath::fmat4& M) { return M.Inverse(); };
+    const auto Globals = [&](auto&& LocalOf, std::vector<xmath::fmat4>& G)
+    {
+        G.resize(n);
+        for (std::int32_t j = 0; j < n; ++j) G[j] = m_Bone[j].m_iParent < 0 ? LocalOf(j) : G[m_Bone[j].m_iParent] * LocalOf(j);
+    };
+    const auto Fits = [&](const xmath::fmat4& M, float Scale)
+    {
+        const xmath::fmat4 R = Local(M.ExtractScale(), M.ExtractRotation(), M.ExtractPosition());
+        float Err = 0;
+        for (int c = 0; c < 4; ++c) for (int r = 0; r < 4; ++r) Err = std::max(Err, std::abs(R(r, c) - M(r, c)));
+        return Err <= Tolerance * std::max(1.0f, Scale);
+    };
+
+    // Every frame's globals and the bind pose's, from the source hierarchy
+    std::vector<xmath::fmat4> BindG;
+    Globals([&](std::int32_t j) { return Local(m_Bone[j].m_BindScale, m_Bone[j].m_BindRotation, m_Bone[j].m_BindTranslation); }, BindG);
+    std::vector<std::vector<xmath::fmat4>> FrameG(m_nFrames);
+    for (std::int32_t f = 0; f < m_nFrames; ++f)
+        Globals([&](std::int32_t j) { const auto& K = m_KeyFrame[f * n + j]; return Local(K.m_Scale, K.m_Rotation, K.m_Position); }, FrameG[f]);
+
+    // New parents, then the representability check: a kept bone whose new local does not fit S/R/T keeps the folded node above it
+    std::vector<std::int32_t> NewParent(n);
+    const auto NewLocal = [&](const std::vector<xmath::fmat4>& G, std::int32_t j) { return NewParent[j] < 0 ? G[j] : Inverse(G[NewParent[j]]) * G[j]; };
+    for (int Pass = 0; Pass < 256; ++Pass)
+    {
+        for (std::int32_t j = 0; j < n; ++j)
+        {
+            std::int32_t p = m_Bone[j].m_iParent;
+            while (p >= 0 && !Keep[p]) p = m_Bone[p].m_iParent;
+            NewParent[j] = p;
+        }
+
+        bool bChanged = false;
+        for (std::int32_t j = 0; j < n && !bChanged; ++j)
+        {
+            if (!Keep[j] || NewParent[j] == m_Bone[j].m_iParent) continue;      // nothing folded above it
+            bool bOk = Fits(NewLocal(BindG, j), BindG[j].ExtractPosition().Length());
+            for (std::int32_t f = 0; f < m_nFrames && bOk; ++f) bOk = Fits(NewLocal(FrameG[f], j), FrameG[f][j].ExtractPosition().Length());
+            if (!bOk)
+            {
+                const auto p = m_Bone[j].m_iParent;                                 // the folded node right above it stays
+                Keep[p] = true; KeptForShear.push_back(m_Bone[p].m_Name); bChanged = true;
+            }
+        }
+        if (!bChanged) break;
+    }
+
+    // The new bone list (a synthetic root first when asked)
+    std::vector<std::int32_t> Remap(n, -1);
+    std::vector<bone>         NewBone;
+    if (bSyntheticRoot)
+    {
+        bone R{};
+        R.m_Name            = std::string(synthetic_root_name_v);
+        R.m_iParent         = -1;
+        R.m_nChildren       = 0;
+        R.m_BindTranslation = xmath::fvec3(0, 0, 0);
+        R.m_BindRotation    = xmath::fquat::fromIdentity();
+        R.m_BindScale       = xmath::fvec3(1, 1, 1);
+        R.m_bScaleKeys = R.m_bRotationKeys = R.m_bTranslationKeys = R.m_bIsMasked = false;
+        R.m_BindMatrix      = xmath::fmat4::fromIdentity();
+        R.m_BindMatrixInv   = xmath::fmat4::fromIdentity();
+        R.m_NeutralPose     = xmath::fmat4::fromIdentity();
+        NewBone.push_back(R);
+    }
+    for (std::int32_t j = 0; j < n; ++j) if (Keep[j]) { Remap[j] = static_cast<std::int32_t>(NewBone.size()); NewBone.push_back(m_Bone[j]); }
+
+    for (std::int32_t j = 0; j < n; ++j)
+    {
+        if (!Keep[j]) continue;
+        auto& B = NewBone[Remap[j]];
+        B.m_iParent = NewParent[j] >= 0 ? Remap[NewParent[j]] : (bSyntheticRoot ? 0 : -1);
+        if (NewParent[j] != m_Bone[j].m_iParent)
+        {
+            const xmath::fmat4 L = NewLocal(BindG, j);
+            B.m_BindScale       = L.ExtractScale();
+            B.m_BindRotation    = L.ExtractRotation();
+            B.m_BindTranslation = L.ExtractPosition();
+            B.m_BindMatrix      = Local(B.m_BindScale, B.m_BindRotation, B.m_BindTranslation);
+        }
+    }
+    for (auto& B : NewBone) B.m_nChildren = 0;
+    for (auto& B : NewBone) if (B.m_iParent >= 0) NewBone[B.m_iParent].m_nChildren++;
+
+    // Every frame's local keys
+    const auto nNew = static_cast<std::int32_t>(NewBone.size());
+    std::vector<key_frame> NewFrame(static_cast<std::size_t>(nNew) * m_nFrames);
+    for (std::int32_t f = 0; f < m_nFrames; ++f)
+    {
+        if (bSyntheticRoot)
+        {
+            auto& K = NewFrame[static_cast<std::size_t>(f) * nNew];
+            K.m_Scale = xmath::fvec3(1, 1, 1); K.m_Rotation = xmath::fquat::fromIdentity(); K.m_Position = xmath::fvec3(0, 0, 0);
+        }
+        for (std::int32_t j = 0; j < n; ++j)
+        {
+            if (!Keep[j]) continue;
+            auto& K = NewFrame[static_cast<std::size_t>(f) * nNew + Remap[j]];
+            if (NewParent[j] == m_Bone[j].m_iParent) { K = m_KeyFrame[static_cast<std::size_t>(f) * n + j]; continue; }
+            const xmath::fmat4 L = NewLocal(FrameG[f], j);
+            K.m_Scale = L.ExtractScale(); K.m_Rotation = L.ExtractRotation(); K.m_Position = L.ExtractPosition();
+        }
+    }
+
+    // Props hang from the nearest kept bone
+    for (auto& P : m_Prop)
+    {
+        std::int32_t b = P.m_iParentBone;
+        while (b >= 0 && !Keep[b]) b = m_Bone[b].m_iParent;
+        P.m_iParentBone = b >= 0 ? Remap[b] : (bSyntheticRoot ? 0 : -1);
+    }
+
+    m_Bone     = std::move(NewBone);
+    m_KeyFrame = std::move(NewFrame);
+    return KeptForShear;
+}
+
+//--------------------------------------------------------------------------
 
 bool anim::ApplyNewSkeleton( const anim& BindAnim )
 {
