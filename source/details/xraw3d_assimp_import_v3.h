@@ -217,6 +217,7 @@ namespace xraw3d::assimp_v3
             xmath::fvec3                        pos{ 0,0,0 };
             xmath::fmat4                        invBind;
             xmath::fmat4                        neutral;
+            bool                                bHasBind = false;
         };
 
         //------------------------------------------------------------------------------------------------------
@@ -1408,38 +1409,33 @@ namespace xraw3d::assimp_v3
                         }
                     }
 
+                    // The rest pose is the nodes' own (authored) transforms; the bind is kept apart in invBind (the editors show both)
+                    const aiNode* const pThisNode  = ProtoBone.m_pAssimpNode;
+                    const aiMatrix4x4   Global     = GetGlobalTransform(pThisNode);
+                    const auto          B          = NameToBone.find(pThisNode->mName.data);
+
+                    aiMatrix4x4 Adjusted;                                           // the inverse bind (identity: none)
+                    internalBone.bHasBind = B != NameToBone.end();
+                    if (B != NameToBone.end()) Adjusted = B->second->mOffsetMatrix * aiMatrix4x4(NameToMeshGlobal[pThisNode->mName.data]).Inverse();
+
                     // Decompose local transform
                     aiVector3D      S, T;
                     aiQuaternion    Q;
 
-                    ProtoBone.m_pAssimpNode->mTransformation.Decompose(S, Q, T);
+                    pThisNode->mTransformation.Decompose(S, Q, T);
                     internalBone.scale  = xmath::fvec3(S.x, S.y, S.z);
                     internalBone.rot.setup(Q.x, Q.y, Q.z, Q.w).NormalizeSafe();
                     internalBone.pos    = xmath::fvec3(T.x, T.y, T.z);
 
-                    // Check if we have a binding matrix
-                    if (auto B = NameToBone.find(ProtoBone.m_pAssimpNode->mName.data); B != NameToBone.end())
                     {
-                        auto OffsetMatrix   = B->second->mOffsetMatrix;
-                        auto NodeMatrix     = NameToMeshGlobal[ProtoBone.m_pAssimpNode->mName.data];
-                        auto Adjusted       = OffsetMatrix * NodeMatrix.Inverse();
-
-                        aiMatrix4x4t<float> adjustedT = Adjusted.Transpose();
+                        aiMatrix4x4t<float> adjustedT = aiMatrix4x4(Adjusted).Transpose();
                         internalBone.invBind = xmath::fmat4();
                         std::memcpy(&internalBone.invBind, &adjustedT, sizeof(xmath::fmat4));
-                    }
-                    else
-                    {
-                        internalBone.invBind = xmath::fmat4::fromIdentity();
                     }
 
                     // Neutral pose
                     {
-                        const auto  C           = NameToNode.find(ProtoBone.m_pAssimpNode->mName.data);
-                        auto        NodeMatrix  = C->second->mTransformation;
-                        for (auto p = C->second->mParent; p; p = p->mParent) NodeMatrix = p->mTransformation * NodeMatrix;
-
-                        aiMatrix4x4t<float> nodeT = NodeMatrix.Transpose();
+                        aiMatrix4x4t<float> nodeT = aiMatrix4x4(Global).Transpose();
                         internalBone.neutral = xmath::fmat4();
                         std::memcpy(&internalBone.neutral, &nodeT, sizeof(xmath::fmat4));
                         internalBone.neutral *= internalBone.invBind;
@@ -1531,6 +1527,7 @@ namespace xraw3d::assimp_v3
                     abone.m_bIsMasked           = false;
                     abone.m_BindMatrix          = xmath::fmat4(abone.m_BindScale, abone.m_BindRotation, abone.m_BindTranslation);
                     abone.m_BindMatrixInv       = m_InternalBones[idx].invBind;
+                    abone.m_bHasBind            = m_InternalBones[idx].bHasBind;
                     abone.m_NeutralPose         = m_InternalBones[idx].neutral;
 
                     auto& kf        = m_pSkeleton->m_KeyFrame[idx];

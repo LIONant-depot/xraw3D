@@ -24,6 +24,7 @@ namespace xraw3d
             bool                    m_bRotationKeys;
             bool                    m_bTranslationKeys;
             bool                    m_bIsMasked;
+            bool                    m_bHasBind = false;     // a mesh is bound to it (its inverse bind came from a skin), not just a node of the hierarchy
 
             xmath::fmat4            m_BindMatrix;
             xmath::fmat4            m_BindMatrixInv;
