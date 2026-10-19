@@ -1031,6 +1031,15 @@ namespace xraw3d::assimp_v3
                 // To cache the last positions for a given frame for each bone
                 LastPositions.resize( AssimpAnim.mNumChannels );
 
+                // A channel that has no keys of one component (a helper node of FBX's transform chain keyed only in its rotation, or not keyed at all)
+                // leaves that component at the node's own transform, not at the identity: a PreRotation helper without keys must keep its rotation
+                struct node_static { aiVector3D m_S{1,1,1}; aiQuaternion m_Q; aiVector3D m_T{0,0,0}; };
+                std::vector<node_static> Statics(AssimpAnim.mNumChannels);
+                std::vector<bool>        Animated(m_InternalBones.size(), false);     // the nodes that have a channel (the key frames start at scale 1, so they cannot tell)
+                for( auto b = 0ul; b < AssimpAnim.mNumChannels; ++b )
+                    if( const aiNode* pNode = m_pScene->mRootNode->FindNode(AssimpAnim.mChannels[b]->mNodeName) )
+                        pNode->mTransformation.Decompose(Statics[b].m_S, Statics[b].m_Q, Statics[b].m_T);
+
                 // Create/Sample all the frames
                 for( int iFrame = 0; iFrame < FrameCount; iFrame++ )
                 {
@@ -1041,7 +1050,7 @@ namespace xraw3d::assimp_v3
                         auto&               LastPos = LastPositions[b];
 
                         // Sample the position key
-                        aiVector3D presentPosition(0, 0, 0);
+                        aiVector3D presentPosition = Statics[b].m_T;
                         if( Channel.mNumPositionKeys > 0 )
                         {
                             // Update the Position Index for the given bone
@@ -1068,7 +1077,7 @@ namespace xraw3d::assimp_v3
                         }
 
                         // Sample the Rotation key
-                        aiQuaternion presentRotation(1, 0, 0, 0);
+                        aiQuaternion presentRotation = Statics[b].m_Q;
                         if( Channel.mNumRotationKeys > 0 )
                         {
                             // Update the Rotation Index for the given bone
@@ -1096,7 +1105,7 @@ namespace xraw3d::assimp_v3
                         }
 
                         // Sample the Scale key
-                        aiVector3D presentScaling( 1, 1, 1 );
+                        aiVector3D presentScaling = Statics[b].m_S;
                         if( Channel.mNumScalingKeys > 0 )
                         {
                             // Update the Rotation Index for the given bone
@@ -1134,6 +1143,7 @@ namespace xraw3d::assimp_v3
                             continue;
                         }
 
+                        Animated[iBone] = true;
                         auto& MyBoneKeyFrame = MyAnim.m_KeyFrame[iFrame * MyAnim.m_Bone.size() + iBone];
                         MyBoneKeyFrame.m_Position = xmath::fvec3(presentPosition.x, presentPosition.y, presentPosition.z);
                         MyBoneKeyFrame.m_Rotation = xmath::fquat(presentRotation.x, presentRotation.y, presentRotation.z, presentRotation.w).NormalizeSafe();
@@ -1152,13 +1162,7 @@ namespace xraw3d::assimp_v3
                     aiVector3D S;
                     aiVector3D T;
                     pNode->mTransformation.Decompose(S, Q, T);
-                    bool hasKeys = false;
-                    for (int f = 0; f < FrameCount; ++f)
-                    {
-                        if (MyAnim.m_KeyFrame[f * MyAnim.m_Bone.size() + i].m_Scale.m_X != 0) { hasKeys = true; break; }
-                    }
-
-                    if (hasKeys) continue;
+                    if (Animated[i]) continue;
 
                     for (int f = 0; f < FrameCount; ++f)
                     {
