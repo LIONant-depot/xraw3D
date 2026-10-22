@@ -127,6 +127,11 @@ namespace xraw3d::assimp_v3
             m_pGeom     = Settings.m_pGeom;
             m_pSkeleton = Settings.m_pSkeleton;
             m_bStaticGeom = Settings.m_bStaticGeometry;
+            {   // glTF's COLOR_0 is linear (StoredColor)
+                std::wstring Ext = std::filesystem::path(FileName).extension().wstring();
+                for (auto& c : Ext) c = static_cast<wchar_t>(std::tolower(static_cast<int>(c)));
+                m_bLinearColors = Ext == L".gltf" || Ext == L".glb";
+            }
 
             if(m_pGeom)
             {
@@ -226,6 +231,16 @@ namespace xraw3d::assimp_v3
         // FUNCTIONS
         //------------------------------------------------------------------------------------------------------
     protected:
+
+        //--------------------------------------------------------------------------------------------------
+        // A vertex color as the geometry stores it: 8 bit sRGB (the vertex shader decodes it). FBX's painted colors already are;
+        // glTF's are linear (by spec): encoded with the sRGB transfer (IEC 61966-2-1), alpha untouched
+        std::array<float, 4> StoredColor( const aiColor4D& c ) const noexcept
+        {
+            if (not m_bLinearColors) return { c.r, c.g, c.b, c.a };
+            auto Encode = [](float x) { x = std::clamp(x, 0.0f, 1.0f); return x <= 0.0031308f ? x * 12.92f : 1.055f * std::pow(x, 1.0f / 2.4f) - 0.055f; };
+            return { Encode(c.r), Encode(c.g), Encode(c.b), c.a };
+        }
 
         //--------------------------------------------------------------------------------------------------
         // The units of the file. FBX: UnitScaleFactor is the centimeters of one unit of the data (assimp leaves the vertices in it: no
@@ -852,7 +867,7 @@ namespace xraw3d::assimp_v3
                         if (AssimpMesh.HasVertexColors(ch))
                         {
                             aiColor4D c = AssimpMesh.mColors[ch][i];
-                            Vertex.m_Color[Vertex.m_nColors++].setupFromRGBA(c.r, c.g, c.b, c.a);
+                            Vertex.m_Color[Vertex.m_nColors++].setupFromRGBA(StoredColor(c));
                         }
                     }
 
@@ -1678,7 +1693,7 @@ namespace xraw3d::assimp_v3
                         if (AssimpMesh.HasVertexColors(ch))
                         {
                             aiColor4D c = AssimpMesh.mColors[ch][i];
-                            Vertex.m_Color[Vertex.m_nColors++].setupFromRGBA(c.r, c.g, c.b, c.a);
+                            Vertex.m_Color[Vertex.m_nColors++].setupFromRGBA(StoredColor(c));
                         }
                     }
 
@@ -1894,5 +1909,6 @@ namespace xraw3d::assimp_v3
         xraw3d::anim*               m_pSkeleton     = nullptr;
         const aiScene*              m_pScene        = nullptr;
         bool                        m_bStaticGeom;
+        bool                        m_bLinearColors = false;   // glTF: the file's vertex colors are linear (StoredColor)
     };
 }
