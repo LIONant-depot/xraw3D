@@ -503,6 +503,20 @@ namespace xraw3d::assimp_v3
                 }
 
                 //
+                // The PBR factors (glTF metallic-roughness, an OBJ material's Pr / Pm): only when the model has them
+                //
+                for (auto [Key, pName] : { std::pair{ "$mat.roughnessFactor", "RoughnessFactor" }, std::pair{ "$mat.metallicFactor", "MetallicFactor" } })
+                {
+                    float f = 0;
+                    if (aiGetMaterialFloat(pcMat, Key, 0, 0, &f) != AI_SUCCESS) continue;
+                    geom::material_instance::params p;
+                    p.m_Type    = geom::material_instance::params_type::F1;
+                    p.m_Name    = pName;
+                    p.m_Value   = std::to_string(f);
+                    MatI.m_Params.push_back(p);
+                }
+
+                //
                 // Shininess strength float
                 //
                 {
