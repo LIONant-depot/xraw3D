@@ -3,6 +3,7 @@
 #include "assimp/postprocess.h"
 #include "dependencies/xstrtool/source/xstrtool.h"
 #include "dependencies/xerr/source/xerr.h"
+#include "dependencies/xblend_unzip/source/xblend_unzip.h"
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -110,6 +111,16 @@ namespace xraw3d::assimp_v3
 
         xerr Import( std::wstring_view FileName, settings& Settings ) noexcept
         {
+            // A .blend is read through its glTF extract (xblend_unzip: Blender exports it once, every importer reads the same one)
+            const auto Blend = xblend_unzip::Resolve(std::filesystem::path(FileName));
+            if( not Blend.m_Error.empty() )
+            {
+                printf("ERROR: %s\n", Blend.m_Error.c_str());
+                return xerr::create<state::ASSIMP_FAIL_TO_IMPORT, "Could not export the .blend file (xblend_unzip)">();
+            }
+            const std::wstring Resolved = Blend.m_Path.wstring();
+            FileName = Resolved;
+
             scope_exit CleanUp([&]
             {
                 //
