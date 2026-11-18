@@ -604,7 +604,7 @@ void anim::BakeBindingIntoFrames( bool DoScale, bool DoRotation, bool DoTranslat
             if( m_Bone[j].m_iParent != -1 )
             {
                 auto PM = L2W[ m_Bone[j].m_iParent ];
-                PM.InverseSRT();
+                PM = PM.InverseSRT();          // (InverseSRT returns the inverse: the call alone discarded it)
                 L2W[j] = PM * L2W[j];
             }
 
@@ -632,8 +632,7 @@ void anim::BakeBindingIntoFrames( bool DoScale, bool DoRotation, bool DoTranslat
             m_Bone[i].m_BindRotation.setupIdentity();
 
         m_Bone[i].m_BindMatrix.setupSRT( m_Bone[i].m_BindScale, m_Bone[i].m_BindRotation, m_Bone[i].m_BindTranslation);
-        m_Bone[i].m_BindMatrixInv = m_Bone[i].m_BindMatrix;
-        m_Bone[i].m_BindMatrixInv.InverseSRT();
+        m_Bone[i].m_BindMatrixInv = m_Bone[i].m_BindMatrix.InverseSRT();
     }
 }
 
@@ -822,7 +821,7 @@ void anim::DeleteBone( std::int32_t iBone )
                 if( NewBone[j].m_iParent != -1 )
                 {
                     xmath::fmat4 PM = L2W[ NewBone[j].m_iParent ];
-                    PM.InverseSRT();
+                    PM = PM.InverseSRT();          // (InverseSRT returns the inverse: the call alone discarded it)
                     L2W[j] = PM * L2W[j];
                 }
 
@@ -1262,7 +1261,7 @@ void anim::setNewRoot( std::int32_t Index )
         {
             assert( NewBone[ j ].m_iParent != -1 );
             xmath::fmat4 PM = L2W[ NewBone[ j ].m_iParent ];
-            PM.InverseSRT();
+            PM = PM.InverseSRT();          // (InverseSRT returns the inverse: the call alone discarded it)
             L2W[ j ] = PM * L2W[ j ];
         }
 
