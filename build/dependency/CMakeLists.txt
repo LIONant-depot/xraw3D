@@ -7,7 +7,8 @@ FetchAndPopulate("https://github.com/LIONant-depot/xmath.git" "main")
 FetchAndPopulate("https://github.com/assimp/assimp.git" "master")
 FetchAndPopulate("https://github.com/mmikk/MikkTSpace.git" "master")
 
-if( assimp_POPULATED )
+# Built when freshly fetched or when its DLL is missing (a fresh setup whose assimp was already checked out, e.g. by the pin, never built it: E60)
+if( WIN32 AND (assimp_POPULATED OR NOT EXISTS "${CMAKE_SOURCE_DIR}/dependencies/assimp/BINARIES/Win32/bin/Release/assimp-vc143-mt.dll") )
   # Configure the project for Visual Studio 2022 (Win32)
   message(STATUS "Configuring CMake project...")
   execute_process(
